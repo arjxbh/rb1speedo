@@ -38,7 +38,7 @@ public class DrivingFeaturesTest {
         check(!warning.update(72.99, true, 3200) && !warning.active(), "Stop below 73 mph");
         check(!warning.update(74, true, 3300), "Do not start inside hysteresis margin");
         check(warning.update(75, true, 3400), "Rearm after slowing down");
-        check(!warning.update(90, false, 3500) && !warning.active(), "Invalid, stale, demo or paused source stops warning");
+        check(!warning.update(90, false, 3500) && !warning.active(), "Invalid, stale or paused source stops warning");
         check(!warning.update(Double.NaN, true, 3600), "Reject invalid speed");
         check(!warning.update(Double.POSITIVE_INFINITY, true, 3700), "Reject infinite speed");
         check(warning.update(130, true, 3800), "Analog cap does not cap warning");

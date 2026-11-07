@@ -32,3 +32,9 @@ The owner confirmed that version 1.1 worked before these changes.
 - Audio is paused/stopped on Activity pause and released on destroy. The greeting is not replayed on configuration recreation or routine Activity resumes. Audio focus interruptions stop playback; media volume is left under user control.
 
 Still requires a physical phone: install over 1.1, greeting text/pronunciation with an offline Japanese voice and text-only fallback without one, media volume and Bluetooth audio routing, audio focus interruptions, portrait/landscape appearance, demo button hiding during real movement (and no hidden touch target), foreground return resetting the button, live GPS warning audibility, and audio stopping when backgrounded. Automated threshold tests avoid needing a high-speed road test. No emulator/audio playback or phone test was performed in this environment.
+
+## Version 1.2.1 — preview speed chime in demo mode
+
+- Demo and live mode now share the displayed-speed calculation with warning processing. Only live GPS movement counts toward hiding the DEMO entry button.
+- Demo uses the existing 75 mph start, 73 mph stop margin, and 1.5-second cadence. Live mode still requires a fresh GPS reading. Mode changes clear simulated warning state.
+- Verify on the phone while stationary: enter demo, wait about five seconds for 75 mph, listen for repeated bells, confirm they stop below 73 mph, exit demo without a GPS fix and confirm silence, and background the app during playback to confirm it stops.

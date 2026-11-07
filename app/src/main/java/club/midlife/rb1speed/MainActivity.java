@@ -34,7 +34,7 @@ public class MainActivity extends Activity implements LocationListener {
                 long now = SystemClock.elapsedRealtime();
                 boolean live = !demo && reading.fresh(now);
                 driveSession.update(reading.mph(), live, now);
-                if (speedWarning.update(reading.mph(), live, now)) audio.playChime();
+                if (speedWarning.update(speedAt(now), demo || live, now)) audio.playChime();
                 if (!speedWarning.active()) audio.cancelChime();
                 dial.invalidate(); handler.postDelayed(this, 33);
             }
@@ -95,6 +95,9 @@ public class MainActivity extends Activity implements LocationListener {
             Toast.makeText(this, "Open github.com/arjxbh/rb1speedo/releases in a browser for updates", Toast.LENGTH_LONG).show();
         }
     }
+    private double speedAt(long now) {
+        return demo ? 58 + 22 * Math.sin((now - demoStart) / 5000.0) : reading.mph();
+    }
     @Override public void onRequestPermissionsResult(int request, String[] permissions, int[] results) {
         super.onRequestPermissionsResult(request, permissions, results); if (active && !demo) startGps();
     }
@@ -133,7 +136,7 @@ public class MainActivity extends Activity implements LocationListener {
             s=Math.min(availW/1000f,availH/940f); ox=(getWidth()-1000*s)/2; oy=(getHeight()-940*s)/2;
             c.save(); c.translate(ox,oy); c.scale(s,s);
             long now=SystemClock.elapsedRealtime(); boolean fresh=reading.fresh(now);
-            double speed=demo ? 58+22*Math.sin((now-demoStart)/5000.0) : reading.mph();
+            double speed=speedAt(now);
             boolean valid=demo||fresh;
             text(c,"ODYSSEY",500,48,25,Color.rgb(159,176,192),false);
             text(c,"RB1  /  GPS SPEED",500,80,14,Color.rgb(91,116,144),false);
