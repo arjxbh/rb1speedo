@@ -13,6 +13,7 @@ import java.util.Set;
 /** Best-effort foreground audio. No network, background playback, or volume changes. */
 final class DriveAudio {
     static final String GREETING = "安全運転で、いってらっしゃい";
+    private static final long GREETING_DELAY_MS = 5000;
     private static final AudioAttributes ATTRIBUTES = new AudioAttributes.Builder()
         .setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build();
     private final Context context;
@@ -22,7 +23,10 @@ final class DriveAudio {
     private AudioTrack chime;
     private TextToSpeech speech;
     private boolean active, focused, focusLost, pendingGreeting, closed, chimePlaying;
-    private long greetingDeadline;
+    private long greetingAt, greetingDeadline;
+    private final Runnable speakGreeting = new Runnable() {
+        @Override public void run() { prepareGreeting(TextToSpeech.SUCCESS); }
+    };
     private final Runnable finishChime = new Runnable() {
         @Override public void run() { stopChime(); abandonFocus(); }
     };
@@ -35,7 +39,7 @@ final class DriveAudio {
             .setOnAudioFocusChangeListener(new AudioManager.OnAudioFocusChangeListener() {
                 @Override public void onAudioFocusChange(int change) {
                     if (change < 0) {
-                        focusLost = true; pendingGreeting = false;
+                        focusLost = true; cancelGreeting();
                         handler.removeCallbacks(finishChime); stopChime();
                         if (speech != null) speech.stop();
                         if (change == AudioManager.AUDIOFOCUS_LOSS) abandonFocus();
@@ -62,7 +66,8 @@ final class DriveAudio {
         active = true; focusLost = false;
         if (greet) {
             pendingGreeting = true;
-            greetingDeadline = SystemClock.elapsedRealtime() + 6000;
+            greetingAt = SystemClock.elapsedRealtime() + GREETING_DELAY_MS;
+            greetingDeadline = greetingAt + 6000;
             speech = new TextToSpeech(context, new TextToSpeech.OnInitListener() {
                 @Override public void onInit(final int result) {
                     handler.post(new Runnable() { @Override public void run() { prepareGreeting(result); } });
@@ -74,6 +79,12 @@ final class DriveAudio {
     private void prepareGreeting(int result) {
         if (closed || !active || !pendingGreeting || SystemClock.elapsedRealtime() >= greetingDeadline ||
             speech == null || result != TextToSpeech.SUCCESS) { pendingGreeting = false; return; }
+        long delay = greetingAt - SystemClock.elapsedRealtime();
+        if (delay > 0) {
+            handler.removeCallbacks(speakGreeting);
+            handler.postDelayed(speakGreeting, delay);
+            return;
+        }
         Set<Voice> voices = speech.getVoices();
         Voice selected = null;
         if (voices != null) for (Voice voice : voices) {
@@ -95,7 +106,7 @@ final class DriveAudio {
     }
 
     void playChime() {
-        pendingGreeting = false;
+        cancelGreeting();
         if (chime == null || !requestFocus()) return;
         if (speech != null) speech.stop();
         handler.removeCallbacks(finishChime);
@@ -128,11 +139,15 @@ final class DriveAudio {
         if (focused) { manager.abandonAudioFocusRequest(focus); focused = false; }
     }
     private void stop() {
-        pendingGreeting = false;
+        cancelGreeting();
         handler.removeCallbacks(finishChime);
         stopChime();
         if (speech != null) speech.stop();
         abandonFocus();
+    }
+    private void cancelGreeting() {
+        pendingGreeting = false;
+        handler.removeCallbacks(speakGreeting);
     }
     void pause() { active = false; stop(); }
     void close() {

@@ -38,3 +38,10 @@ Still requires a physical phone: install over 1.1, greeting text/pronunciation w
 - Demo and live mode now share the displayed-speed calculation with warning processing. Only live GPS movement counts toward hiding the DEMO entry button.
 - Demo uses the existing 75 mph start, 73 mph stop margin, and 1.5-second cadence. Live mode still requires a fresh GPS reading. Mode changes clear simulated warning state.
 - Verify on the phone while stationary: enter demo, wait about five seconds for 75 mph, listen for repeated bells, confirm they stop below 73 mph, exit demo without a GPS fix and confirm silence, and background the app during playback to confirm it stops.
+
+## Version 1.2.2 — delay spoken greeting
+
+- Spoken greeting is scheduled no earlier than five seconds after the initial Activity resume. TTS initialization can run during that interval; a slow engine may speak later, with the existing six-second readiness allowance shifted after the delay.
+- The main thread is not blocked. Pause, destroy, audio focus loss, or a speed warning cancels pending greeting speech; lifecycle checks also guard a late TTS initialization callback.
+- Native compilation, both existing test suites, APK alignment, and signing checks passed locally. No permissions or signing key changes.
+- Physical-phone checks: cold-open with Bluetooth/Android Auto connecting, confirm five seconds before speech and no clipped opening; background within five seconds and confirm no delayed speech; confirm normal gauge/GPS operation during the delay. A fixed delay cannot establish that a particular car audio route is ready; clipping needs verification on the affected setup.
