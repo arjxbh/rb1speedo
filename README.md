@@ -4,12 +4,14 @@ A native Android GPS speedometer inspired by the blue illuminated Honda Odyssey 
 
 ## Install
 
-1. Download `RB1-Speed.apk` to an Android phone (Android 8.0 or newer).
+1. Download [RB1-Speed.apk](https://github.com/arjxbh/rb1speedo/releases/latest/download/RB1-Speed.apk) to an Android phone (Android 8.0 or newer). [Release notes and older versions](https://github.com/arjxbh/rb1speedo/releases).
 2. Open it in Files or Downloads. If Android asks, allow that app to install unknown apps, then choose Install. This is a personally built, development-signed APK, not a Play Store release.
 3. Open **RB1 Speed**, tap the bottom GPS panel, and select **Precise** location and **While using the app**.
 4. Turn on the phone's Location setting. Use outdoors with a clear view of the sky and allow time for the first satellite fix.
 
 Tap **DEMO** at the top right to preview the moving dial. The orange DEMO label identifies simulated speed; tap **EXIT DEMO** or the bottom panel to return to live GPS. Reopening the app always returns to live mode.
+
+Tap **UPDATES** at the top left to open the latest release in your browser. Download `RB1-Speed.apk`, open it, and approve the Android update prompt. The app does not check versions or download updates itself; it needs no Internet or installer permission. Returning from the browser resets to live GPS as usual. Install this version manually once to get the button. Keep the existing app installed when updating; Android verifies signing continuity.
 
 ## Behavior and privacy
 
@@ -23,6 +25,44 @@ Tap **DEMO** at the top right to preview the moving dial. The orange DEMO label 
 Mount the phone before driving. GPS can lag or fail in tunnels and around obstructions; use the vehicle's instruments as your primary reference.
 
 ## Build from source
+
+### This Linux laptop / Linux x86-64
+
+Run once from this folder:
+
+```sh
+./setup-build.sh
+```
+
+This installs Temurin JDK 17, Android SDK 35, build-tools 35.0.0, and ECJ 3.38.0 into ignored `.tools/`. It needs curl, unzip, tar, zip, and sha256sum, and presents the Android SDK license on first setup. No sudo, Android Studio, global Java installation, or shell profile changes are needed.
+
+For every build:
+
+```sh
+./build.sh
+```
+
+Output: `build-native/RB1-Speed.apk` and `build-native/RB1-Speed.apk.sha256`. The command runs speed-model checks, compiles the app, and verifies APK alignment and signing. It uses the included development key. The entire `.tools/` directory is disposable; rerun setup if it is removed.
+
+### GitHub builds and releases
+
+The **Android APK** workflow runs for pushes to `main`, pull requests, and manual runs. It uses the same setup/build scripts as this laptop and keeps APK artifacts for 30 days. Only version-tag pushes publish a GitHub Release; ordinary builds do not change the latest download.
+
+To publish an update:
+
+1. Increase `versionCode` and `versionName` in `version.properties` (both build paths read this file).
+2. Update `RELEASE_NOTES.md`, run `./build.sh`, and commit the changes to `main`.
+3. Push `main`, then push a matching version tag. For example, for version 1.2:
+
+```sh
+git push origin main
+git tag v1.2
+git push origin v1.2
+```
+
+Watch [Actions](https://github.com/arjxbh/rb1speedo/actions) for the build result. A successful tag build publishes the signed APK and SHA-256 checksum to [Releases](https://github.com/arjxbh/rb1speedo/releases). The latest download link and in-app UPDATES button then point to that release. No extra signing secret is required for this prototype because its development key is already included. Do not replace it with a new key for updates, and do not use this publicly included key as a production credential.
+
+### Android Studio / Gradle alternative
 
 Open this folder in Android Studio with JDK 17, Android SDK 35 and Gradle 8.9. Sync, then build the debug APK. No runtime dependencies beyond Android's framework.
 

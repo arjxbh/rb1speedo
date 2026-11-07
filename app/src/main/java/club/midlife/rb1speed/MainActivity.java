@@ -3,6 +3,7 @@ package club.midlife.rb1speed;
 import android.Manifest;
 import android.app.Activity;
 import android.content.Intent;
+import android.content.ActivityNotFoundException;
 import android.content.pm.PackageManager;
 import android.graphics.*;
 import android.location.*;
@@ -10,6 +11,7 @@ import android.os.*;
 import android.provider.Settings;
 import android.net.Uri;
 import android.view.*;
+import android.widget.Toast;
 import java.util.Locale;
 
 public class MainActivity extends Activity implements LocationListener {
@@ -57,6 +59,13 @@ public class MainActivity extends Activity implements LocationListener {
             startActivity(new Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS));
         } else { reading.clear(); startGps(); }
     }
+    private void openUpdates() {
+        try {
+            startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/arjxbh/rb1speedo/releases/latest")));
+        } catch (ActivityNotFoundException e) {
+            Toast.makeText(this, "Open github.com/arjxbh/rb1speedo/releases in a browser for updates", Toast.LENGTH_LONG).show();
+        }
+    }
     @Override public void onRequestPermissionsResult(int request, String[] permissions, int[] results) {
         super.onRequestPermissionsResult(request, permissions, results); if (active && !demo) startGps();
     }
@@ -77,7 +86,7 @@ public class MainActivity extends Activity implements LocationListener {
         private float s, ox, oy, needle;
         private long previous;
         private final int cyan = Color.rgb(114,239,255), blue = Color.rgb(0,71,255);
-        Dial() { super(MainActivity.this); setLayerType(View.LAYER_TYPE_SOFTWARE, null); setContentDescription("RB1 GPS speedometer. Tap bottom panel to enable GPS. Tap top right for demo."); setFocusable(true); }
+        Dial() { super(MainActivity.this); setLayerType(View.LAYER_TYPE_SOFTWARE, null); setContentDescription("RB1 GPS speedometer. Tap bottom panel to enable GPS. Tap top right for demo. Tap top left for updates."); setFocusable(true); }
         private void text(Canvas c, String value, float x, float y, float size, int color, boolean glow) {
             p.reset(); p.setAntiAlias(true); p.setColor(color); p.setTextSize(size); p.setTextAlign(Paint.Align.CENTER);
             p.setTypeface(Typeface.create("sans-serif-light", Typeface.NORMAL));
@@ -99,6 +108,7 @@ public class MainActivity extends Activity implements LocationListener {
             boolean valid=demo||fresh;
             text(c,"ODYSSEY",500,48,25,Color.rgb(159,176,192),false);
             text(c,"RB1  /  GPS SPEED",500,80,14,Color.rgb(91,116,144),false);
+            text(c,"UPDATES",125,59,19,Color.rgb(118,145,168),false);
             text(c,demo ? "EXIT DEMO" : "DEMO",875,59,19,demo?Color.rgb(255,167,76):Color.rgb(118,145,168),false);
             // A continuous luminous blue annulus, matching the reference cluster.
             p.reset(); p.setAntiAlias(true); p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(105);
@@ -132,12 +142,13 @@ public class MainActivity extends Activity implements LocationListener {
             text(c,label,500,858,21,demo?0xffffb15e:fresh?cyan:0xffb4c3d0,false);
             text(c,demo?"DISPLAY PREVIEW ONLY":fresh?String.format(Locale.US,"GPS accuracy ±%.0f m · PHONE GPS",accuracy):"USE OUTDOORS WITH A CLEAR VIEW OF THE SKY",500,920,16,0xff668097,false);
             c.restore();
-            setContentDescription(valid?String.format(Locale.US,"%.0f miles per hour. %s",speed,demo?"Demo mode":"GPS connected"):label);
+            setContentDescription((valid?String.format(Locale.US,"%.0f miles per hour. %s",speed,demo?"Demo mode":"GPS connected"):label) + ". Tap top left for updates, top right for demo, bottom panel for GPS.");
         }
         @Override public boolean onTouchEvent(MotionEvent e) {
             if(e.getAction()==MotionEvent.ACTION_UP) {
                 float x=(e.getX()-ox)/s,y=(e.getY()-oy)/s;
-                if(x>760&&y<110) { demo=!demo; reading.clear(); if(demo) {stopGps();demoStart=SystemClock.elapsedRealtime();} else startGps(); performClick(); }
+                if(x>=0&&x<240&&y>=0&&y<110) { openUpdates(); performClick(); }
+                else if(x>760&&y<110) { demo=!demo; reading.clear(); if(demo) {stopGps();demoStart=SystemClock.elapsedRealtime();} else startGps(); performClick(); }
                 else if(y>790) { action(); performClick(); }
                 return true;
             } return true;

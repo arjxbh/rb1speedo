@@ -1,0 +1,63 @@
+name: Android APK
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Validate release version
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          version=$(sed -n 's/^versionName=//p' version.properties)
+          test "$GITHUB_REF_NAME" = "v$version"
+      - name: Set up native build tools
+        run: |
+          # Keep setup's exit status; yes may exit with SIGPIPE after SDK setup.
+          set +o pipefail
+          yes | ./setup-build.sh
+      - name: Test, build, verify alignment and signature
+        run: ./build.sh
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: RB1-Speed
+          path: |
+            build-native/RB1-Speed.apk
+            build-native/RB1-Speed.apk.sha256
+          if-no-files-found: error
+          retention-days: 30
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/') && github.event_name == 'push'
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: RB1-Speed
+          path: build-native
+      - name: Publish APK release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd build-native
+          sha256sum --check RB1-Speed.apk.sha256
+          cd ..
+          gh release create "$GITHUB_REF_NAME" \
+            build-native/RB1-Speed.apk build-native/RB1-Speed.apk.sha256 \
+            --verify-tag --latest --title "RB1 Speed $GITHUB_REF_NAME" \
+            --notes-file RELEASE_NOTES.md

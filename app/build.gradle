@@ -1,8 +1,10 @@
 plugins { id 'com.android.application' }
+def appVersion = new Properties()
+rootProject.file('version.properties').withInputStream { appVersion.load(it) }
 android {
     namespace 'club.midlife.rb1speed'
     compileSdk 35
-    defaultConfig { applicationId 'club.midlife.rb1speed'; minSdk 26; targetSdk 35; versionCode 1; versionName '1.0' }
+    defaultConfig { applicationId 'club.midlife.rb1speed'; minSdk 26; targetSdk 35; versionCode appVersion.getProperty('versionCode').toInteger(); versionName appVersion.getProperty('versionName') }
     signingConfigs { development { storeFile rootProject.file('development.jks'); storePassword 'android'; keyAlias 'rb1'; keyPassword 'android' } }
     buildTypes { debug { signingConfig signingConfigs.development } }
     compileOptions { sourceCompatibility JavaVersion.VERSION_1_8; targetCompatibility JavaVersion.VERSION_1_8 }
