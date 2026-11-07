@@ -11,6 +11,12 @@ A native Android GPS speedometer inspired by the blue illuminated Honda Odyssey 
 
 Tap **DEMO** at the top right to preview the moving dial. The orange DEMO label identifies simulated speed; tap **EXIT DEMO** or the bottom panel to return to live GPS. Reopening the app always returns to live mode.
 
+The DEMO entry button hides after 10 continuous seconds of fresh live GPS speed above 1 mph. Stationary or unavailable speed resets that timer; simulated speed does not count. Once hidden, the button and its touch target stay hidden for the rest of that foreground session. Returning to the app restores it. EXIT DEMO remains available while a preview is active.
+
+On first opening, the footer shows **安全運転で、いってらっしゃい** (“Drive safely—have a good trip”) for six seconds. It is also spoken if the phone's default text-to-speech engine has an installed offline Japanese voice. With no such voice, the text still appears; the app does not download voice data or use a network voice. The greeting does not repeat on rotation or routine returns from settings/browser; a new app launch after the Activity has been closed can greet again.
+
+A locally synthesized bell chimes at an accepted live speed of **75 mph**, repeating every 1.5 seconds. It stops below **73 mph** (a small margin avoids toggling around the threshold), when GPS speed expires, or when the app pauses. It does not sound in demo mode. Both sounds use media volume and respect Android audio focus; they do not force volume changes or play in the background. Sound quality, Bluetooth routing, and Japanese speech depend on the phone and require physical testing.
+
 Tap **UPDATES** at the top left to open the latest release in your browser. Download `RB1-Speed.apk`, open it, and approve the Android update prompt. The app does not check versions or download updates itself; it needs no Internet or installer permission. Returning from the browser resets to live GPS as usual. Install this version manually once to get the button. Keep the existing app installed when updating; Android verifies signing continuity.
 
 ## Behavior and privacy
@@ -73,3 +79,5 @@ The included development signing key is for this personal prototype, not a produ
 `build-native.sh` is the dependency-light alternative used for the supplied APK. Requires SDK 35, build-tools 35.0.0, Java 17, zip, and Eclipse ECJ 3.38.0. Pass the SDK directory and ECJ jar as arguments.
 
 `tests/SpeedReadingTest.java` checks mph conversion, zero speed, missing speed, accuracy rejection, invalid numbers, stale and out-of-order timestamps, and reset independently of Android. Real-world GPS behavior still needs verification on your phone.
+
+`tests/DrivingFeaturesTest.java` checks the demo visibility timer, stops and GPS/timer gaps, warning threshold/hysteresis/repeat timing, expiry and session reset, and synthesized chime duration/envelope. Both suites run in local and GitHub native builds. Future tasks are tracked in [GitHub Issues](https://github.com/arjxbh/rb1speedo/issues).

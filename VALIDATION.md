@@ -19,3 +19,16 @@ The owner installed the initial app on a physical phone and confirmed that it wo
 - Android Studio/Gradle build was not exercised; the laptop and CI use the native build path.
 
 Physical-phone checks still required for this version: install over the existing app, inspect UPDATES in portrait and landscape, tap it to open the release, download/install an APK through the browser, and confirm returning to the app resets to live GPS. Live GPS reception and accuracy still require phone testing. The speedometer displays unavailable speed as a dash after four seconds without an accepted GPS speed fix.
+
+## Version 1.2 — demo visibility, speed chime, and Japanese greeting
+
+The owner confirmed that version 1.1 worked before these changes.
+
+- Native compilation, existing SpeedReading tests, and new DrivingFeatures tests passed locally.
+- New checks cover the ten-second movement interval, jitter/stops, unreliable GPS and timer gaps, session reset, warning start at 75 mph / stop below 73 mph, 1.5-second repeat cadence, invalid samples, four-second expiry, and chime PCM duration/envelope.
+- APK alignment and v2/v3 signatures passed with the unchanged development certificate.
+- Package is unchanged; version 1.2 / code 3; minimum API 26 and target API 35.
+- Greeting uses Android TTS voice discovery restricted to installed offline Japanese voices. Text remains visible without speech. The manifest adds TTS service visibility, with no new permissions.
+- Audio is paused/stopped on Activity pause and released on destroy. The greeting is not replayed on configuration recreation or routine Activity resumes. Audio focus interruptions stop playback; media volume is left under user control.
+
+Still requires a physical phone: install over 1.1, greeting text/pronunciation with an offline Japanese voice and text-only fallback without one, media volume and Bluetooth audio routing, audio focus interruptions, portrait/landscape appearance, demo button hiding during real movement (and no hidden touch target), foreground return resetting the button, live GPS warning audibility, and audio stopping when backgrounded. Automated threshold tests avoid needing a high-speed road test. No emulator/audio playback or phone test was performed in this environment.

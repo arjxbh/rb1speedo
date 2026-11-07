@@ -18,13 +18,27 @@ public class MainActivity extends Activity implements LocationListener {
     private LocationManager manager;
     private Dial dial;
     private final SpeedReading reading = new SpeedReading();
+    private final DriveSession driveSession = new DriveSession();
+    private final SpeedWarning speedWarning = new SpeedWarning();
+    private DriveAudio audio;
     private boolean demo, active, subscribed, asked;
+    private boolean greetingShown;
     private String status = "TAP TO ENABLE GPS";
     private float accuracy;
     private long demoStart;
+    private long greetingUntil;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Runnable ticker = new Runnable() {
-        public void run() { if (active) { dial.invalidate(); handler.postDelayed(this, 33); } }
+        public void run() {
+            if (active) {
+                long now = SystemClock.elapsedRealtime();
+                boolean live = !demo && reading.fresh(now);
+                driveSession.update(reading.mph(), live, now);
+                if (speedWarning.update(reading.mph(), live, now)) audio.playChime();
+                if (!speedWarning.active()) audio.cancelChime();
+                dial.invalidate(); handler.postDelayed(this, 33);
+            }
+        }
     };
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -34,10 +48,25 @@ public class MainActivity extends Activity implements LocationListener {
         getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_FULLSCREEN |
             View.SYSTEM_UI_FLAG_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
         manager = (LocationManager)getSystemService(LOCATION_SERVICE);
+        audio = new DriveAudio(this);
+        greetingShown = state != null && state.getBoolean("greetingShown", false);
         dial = new Dial(); setContentView(dial);
     }
-    @Override public void onResume() { super.onResume(); active = true; demo = false; reading.clear(); startGps(); handler.post(ticker); }
-    @Override public void onPause() { active = false; handler.removeCallbacks(ticker); stopGps(); reading.clear(); super.onPause(); }
+    @Override public void onResume() {
+        super.onResume(); active = true; demo = false; reading.clear();
+        driveSession.reset(); speedWarning.reset();
+        boolean greet = !greetingShown;
+        if (greet) { greetingShown = true; greetingUntil = SystemClock.elapsedRealtime() + 6000; }
+        audio.resume(greet); startGps(); handler.post(ticker);
+    }
+    @Override public void onPause() {
+        active = false; handler.removeCallbacks(ticker); audio.pause();
+        speedWarning.reset(); stopGps(); reading.clear(); super.onPause();
+    }
+    @Override public void onDestroy() { audio.close(); super.onDestroy(); }
+    @Override public void onSaveInstanceState(Bundle state) {
+        state.putBoolean("greetingShown", greetingShown); super.onSaveInstanceState(state);
+    }
     private boolean permitted() { return checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED; }
     private void stopGps() { if (subscribed) { manager.removeUpdates(this); subscribed = false; } }
     private void startGps() {
@@ -109,7 +138,7 @@ public class MainActivity extends Activity implements LocationListener {
             text(c,"ODYSSEY",500,48,25,Color.rgb(159,176,192),false);
             text(c,"RB1  /  GPS SPEED",500,80,14,Color.rgb(91,116,144),false);
             text(c,"UPDATES",125,59,19,Color.rgb(118,145,168),false);
-            text(c,demo ? "EXIT DEMO" : "DEMO",875,59,19,demo?Color.rgb(255,167,76):Color.rgb(118,145,168),false);
+            if (demo || driveSession.demoVisible()) text(c,demo ? "EXIT DEMO" : "DEMO",875,59,19,demo?Color.rgb(255,167,76):Color.rgb(118,145,168),false);
             // A continuous luminous blue annulus, matching the reference cluster.
             p.reset(); p.setAntiAlias(true); p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(105);
             p.setShader(new RadialGradient(500,460,405,new int[]{0xff020611,0xff020611,0xff082cf2,0xff031441,0xff01040c},new float[]{0,.67f,.76f,.93f,1},Shader.TileMode.CLAMP));
@@ -140,15 +169,15 @@ public class MainActivity extends Activity implements LocationListener {
             String label=demo?"DEMO · TAP BELOW FOR LIVE GPS":fresh?"GPS CONNECTED":status.equals("GPS CONNECTED")?"SIGNAL LOST · WAITING FOR GPS":status;
             p.setColor(demo?0xff2c1a0c:0xff061327);c.drawRoundRect(125,818,875,884,12,12,p);
             text(c,label,500,858,21,demo?0xffffb15e:fresh?cyan:0xffb4c3d0,false);
-            text(c,demo?"DISPLAY PREVIEW ONLY":fresh?String.format(Locale.US,"GPS accuracy ±%.0f m · PHONE GPS",accuracy):"USE OUTDOORS WITH A CLEAR VIEW OF THE SKY",500,920,16,0xff668097,false);
+            text(c,now < greetingUntil ? DriveAudio.GREETING : demo?"DISPLAY PREVIEW ONLY":fresh?String.format(Locale.US,"GPS accuracy ±%.0f m · PHONE GPS",accuracy):"USE OUTDOORS WITH A CLEAR VIEW OF THE SKY",500,920,16,0xff668097,false);
             c.restore();
-            setContentDescription((valid?String.format(Locale.US,"%.0f miles per hour. %s",speed,demo?"Demo mode":"GPS connected"):label) + ". Tap top left for updates, top right for demo, bottom panel for GPS.");
+            setContentDescription((valid?String.format(Locale.US,"%.0f miles per hour. %s",speed,demo?"Demo mode":"GPS connected"):label) + ". Tap top left for updates, " + (demo || driveSession.demoVisible() ? "top right for demo, " : "") + "bottom panel for GPS.");
         }
         @Override public boolean onTouchEvent(MotionEvent e) {
             if(e.getAction()==MotionEvent.ACTION_UP) {
                 float x=(e.getX()-ox)/s,y=(e.getY()-oy)/s;
                 if(x>=0&&x<240&&y>=0&&y<110) { openUpdates(); performClick(); }
-                else if(x>760&&y<110) { demo=!demo; reading.clear(); if(demo) {stopGps();demoStart=SystemClock.elapsedRealtime();} else startGps(); performClick(); }
+                else if(x>760&&y<110&&(demo||driveSession.demoVisible())) { demo=!demo; reading.clear(); speedWarning.reset(); audio.cancelChime(); if(demo) {stopGps();demoStart=SystemClock.elapsedRealtime();} else startGps(); performClick(); }
                 else if(y>790) { action(); performClick(); }
                 return true;
             } return true;

@@ -13,8 +13,9 @@ VERSION_NAME="$(sed -n 's/^versionName=//p' version.properties)"
 rm -rf build-native
 mkdir -p build-native/classes build-native/tests build-native/dex
 java -jar "$ECJ" -8 -warn:none -bootclasspath "$JAR" -d build-native/classes app/src/main/java/club/midlife/rb1speed/*.java
-java -jar "$ECJ" -8 -warn:none -d build-native/tests app/src/main/java/club/midlife/rb1speed/SpeedReading.java tests/SpeedReadingTest.java
+java -jar "$ECJ" -8 -warn:none -d build-native/tests app/src/main/java/club/midlife/rb1speed/SpeedReading.java app/src/main/java/club/midlife/rb1speed/DriveSession.java app/src/main/java/club/midlife/rb1speed/SpeedWarning.java app/src/main/java/club/midlife/rb1speed/ChimeSound.java tests/*.java
 java -cp build-native/tests SpeedReadingTest
+java -cp build-native/tests DrivingFeaturesTest
 "$BT/aapt2" compile --dir app/src/main/res -o build-native/resources.zip
 "$BT/aapt2" link -o build-native/unsigned.apk -I "$JAR" --manifest app/src/main/AndroidManifest.xml --version-code "$VERSION_CODE" --version-name "$VERSION_NAME" build-native/resources.zip
 find build-native/classes -name '*.class' -print0 | xargs -0 "$BT/d8" --lib "$JAR" --min-api 26 --output build-native/dex
