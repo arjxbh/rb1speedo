@@ -1,5 +1,7 @@
-The spoken Japanese startup greeting now waits five seconds after opening the app, giving Bluetooth/Android Auto audio time to settle before speech begins.
+Choose from five car-inspired dashboard skins: Honda Odyssey Absolute RB1, Nissan Skyline GT-R R32, Toyota Supra A80, Mazda RX-7 FD3S, and Honda Integra Type R DC2.
 
-The delay is non-blocking: the gauge and GPS start immediately. Pending speech is canceled if the app is backgrounded or a speed warning takes priority. The greeting still uses an installed offline Japanese voice and does not replay on routine resumes.
+Tap SKINS in the center header to open the selector. Each skin has its own palette, typography, dial sweep, and markings. Your selection is saved across app restarts; the original RB1 skin remains the default.
 
-Native compilation, both test suites, APK alignment, and signing checks passed locally. Bluetooth/Android Auto clipping and delayed-speech cancellation still need a physical-phone check. Existing signing key preserved for installation over prior versions. Android 8.0 or newer.
+Switch skins during live GPS or demo mode without resetting the current reading. All skins use the same GPS speed in mph, 0–120 mph analog scale, uncapped digital speed, and existing warning chime behavior.
+
+Native compilation, both test suites, APK alignment, and signing checks passed locally. Visual layout, touch interaction, and saved selection still need a physical-phone check. Existing signing key preserved for installation over prior versions. Android 8.0 or newer.
