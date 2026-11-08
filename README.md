@@ -1,10 +1,10 @@
 # RB1 Speed
 
-A native Android GPS speedometer inspired by the blue illuminated Honda Odyssey RB1 cluster: cyan scale, blue ring, orange needle, 0–120 mph dial, and a large digital mph readout. Digital speed remains uncapped if the analog dial reaches its end.
+A native Android GPS speedometer with five JDM-inspired skins. A recessed analog dial, beveled rim, and shaded needle sit beside a large digital mph readout in landscape and above it in portrait. Native buttons stay outside the gauge. Digital speed remains uncapped if the 0–120 mph analog dial reaches its end.
 
 ## Dashboard skins
 
-Tap **SKINS ▾** in the center header to choose a car-inspired dashboard. The app remembers your selection across restarts; canceling keeps the current skin.
+Tap **Skins ▾** in the header to choose a car-inspired dashboard. The app remembers your selection across restarts; canceling keeps the current skin.
 
 - **Honda Odyssey Absolute RB1** — original luminous blue ring and cyan markings.
 - **Nissan Skyline GT-R R32** — dark analog face, condensed ivory markings, orange needle.
@@ -18,10 +18,10 @@ These are inspired speedometer interpretations. All skins show the same live GPS
 
 1. Download [RB1-Speed.apk](https://github.com/arjxbh/rb1speedo/releases/latest/download/RB1-Speed.apk) to an Android phone (Android 8.0 or newer). [Release notes and older versions](https://github.com/arjxbh/rb1speedo/releases).
 2. Open it in Files or Downloads. If Android asks, allow that app to install unknown apps, then choose Install. This is a personally built, development-signed APK, not a Play Store release.
-3. Open **RB1 Speed**, tap the bottom GPS panel, and select **Precise** location and **While using the app**.
+3. Open **RB1 Speed**, tap the GPS status button, and select **Precise** location and **While using the app**.
 4. Turn on the phone's Location setting. Use outdoors with a clear view of the sky and allow time for the first satellite fix.
 
-Tap **DEMO** at the top right to preview the moving dial. The orange DEMO label identifies simulated speed; tap **EXIT DEMO** or the bottom panel to return to live GPS. Reopening the app always returns to live mode.
+Tap **Demo** beside Updates to preview the moving dial. The orange “Simulated speed” label identifies the preview; tap **Exit demo** or **Return to live GPS** to return to live GPS. Reopening the app always returns to live mode.
 
 The DEMO entry button hides after 10 continuous seconds of fresh live GPS speed above 1 mph. Stationary or unavailable speed resets that timer; simulated speed does not count. Once hidden, the button and its touch target stay hidden for the rest of that foreground session. Returning to the app restores it. EXIT DEMO remains available while a preview is active.
 
@@ -29,7 +29,7 @@ On first opening, the footer shows **安全運転で、いってらっしゃい*
 
 A locally synthesized bell chimes at **75 mph**, repeating every 1.5 seconds. In live mode it uses accepted GPS speed; in demo mode it follows the simulated speed so you can preview the sound while stationary. It stops below **73 mph** (a small margin avoids toggling around the threshold), when live GPS speed expires, when exiting demo without a fresh fix, or when the app pauses. Both sounds use media volume and respect Android audio focus; they do not force volume changes or play in the background. Sound quality, Bluetooth routing, and Japanese speech depend on the phone and require physical testing.
 
-Tap **UPDATES** at the top left to open the latest release in your browser. Download `RB1-Speed.apk`, open it, and approve the Android update prompt. The app does not check versions or download updates itself; it needs no Internet or installer permission. Returning from the browser resets to live GPS as usual. Install this version manually once to get the button. Keep the existing app installed when updating; Android verifies signing continuity.
+Tap **Updates** in the control row to open the latest release in your browser. Download `RB1-Speed.apk`, open it, and approve the Android update prompt. The app does not check versions or download updates itself; it needs no Internet or installer permission. Returning from the browser resets to live GPS as usual. Install this version manually once to get the button. Keep the existing app installed when updating; Android verifies signing continuity.
 
 ## Behavior and privacy
 

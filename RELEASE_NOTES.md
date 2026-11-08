@@ -1,7 +1,9 @@
-Choose from five car-inspired dashboard skins: Honda Odyssey Absolute RB1, Nissan Skyline GT-R R32, Toyota Supra A80, Mazda RX-7 FD3S, and Honda Integra Type R DC2.
+The dashboard now uses more screen space and keeps every control outside the gauge.
 
-Tap SKINS in the center header to open the selector. Each skin has its own palette, typography, dial sweep, and markings. Your selection is saved across app restarts; the original RB1 skin remains the default.
+In portrait, a large dial sits above the digital speed and controls. In landscape, the dial sits beside a dedicated speed and controls panel. Native buttons provide larger touch targets and stay clear of system bars and display cutouts.
 
-Switch skins during live GPS or demo mode without resetting the current reading. All skins use the same GPS speed in mph, 0–120 mph analog scale, uncapped digital speed, and existing warning chime behavior.
+All five skins now feature beveled rims, recessed face lighting, shaded needles, and raised hubs. Static gauge artwork is cached for efficient animation. Skin selection, GPS speed in mph, demo mode, and the warning chime retain their existing behavior.
 
-Native compilation, both test suites, APK alignment, and signing checks passed locally. Visual layout, touch interaction, and saved selection still need a physical-phone check. Existing signing key preserved for installation over prior versions. Android 8.0 or newer.
+Native compilation, both test suites, APK alignment, and signing checks passed locally. Android 15 emulator checks covered all five skins in both orientations, button sizing and separation, demo interaction, picker cancellation, and saved selection after restart. Physical-phone GPS, audio routing, and font-size/accessibility checks remain device-dependent.
+
+Android 8.0 or newer. Uses the existing signing key for installation over prior versions. Download RB1-Speed.apk and open it to update without uninstalling the app.

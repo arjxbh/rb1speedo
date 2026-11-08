@@ -45,3 +45,14 @@ Still requires a physical phone: install over 1.1, greeting text/pronunciation w
 - The main thread is not blocked. Pause, destroy, audio focus loss, or a speed warning cancels pending greeting speech; lifecycle checks also guard a late TTS initialization callback.
 - Native compilation, both existing test suites, APK alignment, and signing checks passed locally. No permissions or signing key changes.
 - Physical-phone checks: cold-open with Bluetooth/Android Auto connecting, confirm five seconds before speech and no clipped opening; background within five seconds and confirm no delayed speech; confirm normal gauge/GPS operation during the delay. A fixed delay cannot establish that a particular car audio route is ready; clipping needs verification on the affected setup.
+
+## Version 1.4 — responsive dashboard and gauge depth
+
+- Replaced the fixed full-screen canvas with separate native controls and gauge artwork. Portrait stacks the gauge and digital speed; landscape places the gauge beside the speed and controls panel. Insets keep controls clear of system bars and cutouts.
+- Added a beveled rim, recessed face lighting, shaded needle, and raised hub across all five skins. Static gauge artwork is cached until the view size or skin changes.
+- Native build, SpeedReading and DrivingFeatures suites, alignment, and v2/v3 signing checks passed. Package, signing key, and permissions remain unchanged; release version is 1.4 / code 7.
+- Android 15 / API 35 emulator: installed the APK and checked all five skins in portrait and landscape. Automated UI checks verified clickable buttons are at least 48 dp tall and do not overlap each other, exercised demo entry/exit, confirmed picker cancel preserves the selection, and confirmed the saved skin survives a cold Activity start.
+- Captured all ten skin/orientation combinations. Visually inspected RB1 and Integra previews for gauge depth and separation from controls. Preview copies are in ignored `build-native/previews/`.
+- Penpot MCP responded, but file inspection reported no connected plugin instance. No changes were made to the Penpot document.
+
+Physical-phone layout, accessibility/font-size settings, real GPS, and audio routing still need device verification. The owner reviewed the emulator previews and approved this redesign for release.

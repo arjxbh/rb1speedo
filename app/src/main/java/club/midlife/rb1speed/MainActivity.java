@@ -14,11 +14,20 @@ import android.provider.Settings;
 import android.net.Uri;
 import android.view.*;
 import android.widget.Toast;
+import android.widget.LinearLayout;
+import android.widget.TextView;
+import android.widget.Button;
+import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.StateListDrawable;
+import android.content.res.Configuration;
 import java.util.Locale;
 
 public class MainActivity extends Activity implements LocationListener {
     private LocationManager manager;
-    private Dial dial;
+    private DashboardDial dial;
+    private LinearLayout dashboard;
+    private TextView speedText, sourceText, footerText, carText;
+    private Button skinButton, demoButton, gpsButton;
     private DashboardSkin skin;
     private final SpeedReading reading = new SpeedReading();
     private final DriveSession driveSession = new DriveSession();
@@ -39,7 +48,7 @@ public class MainActivity extends Activity implements LocationListener {
                 driveSession.update(reading.mph(), live, now);
                 if (speedWarning.update(speedAt(now), demo || live, now)) audio.playChime();
                 if (!speedWarning.active()) audio.cancelChime();
-                dial.invalidate(); handler.postDelayed(this, 33);
+                refreshDashboard(now); handler.postDelayed(this, 33);
             }
         }
     };
@@ -54,7 +63,7 @@ public class MainActivity extends Activity implements LocationListener {
         audio = new DriveAudio(this);
         greetingShown = state != null && state.getBoolean("greetingShown", false);
         skin = DashboardSkin.fromId(getPreferences(MODE_PRIVATE).getString("skin", "rb1"));
-        dial = new Dial(); setContentView(dial);
+        buildDashboard();
     }
     @Override public void onResume() {
         super.onResume(); active = true; demo = false; reading.clear();
@@ -101,7 +110,7 @@ public class MainActivity extends Activity implements LocationListener {
                 @Override public void onClick(DialogInterface dialog, int which) {
                 skin = skins[which];
                 getPreferences(MODE_PRIVATE).edit().putString("skin", skin.id).apply();
-                dial.invalidate();
+                refreshDashboard(SystemClock.elapsedRealtime());
                 dialog.dismiss();
                 }
             }).setNegativeButton("Cancel", null).show();
@@ -131,90 +140,122 @@ public class MainActivity extends Activity implements LocationListener {
     @Override public void onProviderEnabled(String provider) { if (active && !demo) startGps(); }
     @Override public void onStatusChanged(String provider, int value, Bundle extras) {}
 
-    private final class Dial extends View {
-        private final Paint p = new Paint(3);
-        private float s, ox, oy, needle;
-        private long previous;
-        private int cyan, blue;
-        Dial() { super(MainActivity.this); setLayerType(View.LAYER_TYPE_SOFTWARE, null); setContentDescription("RB1 GPS speedometer. Tap bottom panel to enable GPS. Tap center header to choose a skin. Tap top right for demo. Tap top left for updates."); setFocusable(true); }
-        private void text(Canvas c, String value, float x, float y, float size, int color, boolean glow) {
-            p.reset(); p.setAntiAlias(true); p.setColor(color); p.setTextSize(size); p.setTextAlign(Paint.Align.CENTER);
-            p.setTypeface(Typeface.create(skin.font, skin == DashboardSkin.INTEGRA ? Typeface.BOLD : Typeface.NORMAL));
-            if (glow) p.setShadowLayer(9,0,0,blue); c.drawText(value,x,y,p); p.clearShadowLayer();
+    private int dp(float value) { return Math.round(value * getResources().getDisplayMetrics().density); }
+    private void setText(TextView view, String text) {
+        if (!text.contentEquals(view.getText())) view.setText(text);
+    }
+    private TextView label(float size, int color) {
+        TextView view = new TextView(this);
+        view.setTextSize(size); view.setTextColor(color); view.setGravity(Gravity.CENTER);
+        view.setFontFeatureSettings("tnum");
+        view.setIncludeFontPadding(false);
+        return view;
+    }
+    private Button button(String title, View.OnClickListener action) {
+        Button button = new Button(this);
+        button.setText(title); button.setAllCaps(false); button.setTextSize(14);
+        button.setTextColor(0xffe4edf7); button.setMinWidth(0); button.setMinimumWidth(0);
+        button.setMinHeight(dp(48)); button.setMinimumHeight(dp(48));
+        button.setPadding(dp(12), dp(4), dp(12), dp(4));
+        StateListDrawable states = new StateListDrawable();
+        for (boolean pressed : new boolean[]{true, false}) {
+            GradientDrawable background = new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+                pressed ? new int[]{0xff2a3c50,0xff182738} : new int[]{0xff19232e,0xff0c121a});
+            background.setCornerRadius(dp(10)); background.setStroke(dp(1), pressed ? 0xff8298ac : 0xff344150);
+            states.addState(pressed ? new int[]{android.R.attr.state_pressed} : new int[]{}, background);
         }
-        private void line(Canvas c,float x1,float y1,float x2,float y2,int color,float width,boolean glow) {
-            p.reset(); p.setAntiAlias(true); p.setColor(color); p.setStrokeWidth(width); p.setStrokeCap(Paint.Cap.ROUND);
-            if (glow) p.setShadowLayer(12,0,0,color); c.drawLine(x1,y1,x2,y2,p); p.clearShadowLayer();
-        }
-        private float x(float r,double a) { return 500 + r*(float)Math.cos(Math.toRadians(a)); }
-        private float y(float r,double a) { return 460 + r*(float)Math.sin(Math.toRadians(a)); }
-        @Override protected void onDraw(Canvas c) {
-            cyan=skin.ink; blue=skin.accent;
-            c.drawColor(skin.background);
-            float availW=getWidth()-getPaddingLeft()-getPaddingRight(), availH=getHeight()-getPaddingTop()-getPaddingBottom();
-            s=Math.min(availW/1000f,availH/940f); ox=(getWidth()-1000*s)/2; oy=(getHeight()-940*s)/2;
-            c.save(); c.translate(ox,oy); c.scale(s,s);
-            long now=SystemClock.elapsedRealtime(); boolean fresh=reading.fresh(now);
-            double speed=speedAt(now);
-            boolean valid=demo||fresh;
-            if (skin == DashboardSkin.RB1) {
-            // Preserve the original luminous RB1 annulus.
-            p.reset(); p.setAntiAlias(true); p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(105);
-            p.setShader(new RadialGradient(500,460,405,new int[]{0xff020611,0xff020611,0xff082cf2,0xff031441,0xff01040c},new float[]{0,.67f,.76f,.93f,1},Shader.TileMode.CLAMP));
-            c.drawArc(new RectF(147,107,853,813),140,260,false,p); p.setShader(null);
-            p.setColor(0xff14263d);p.setStrokeWidth(2);c.drawArc(new RectF(89,49,911,871),140,260,false,p);
-            } else {
-                p.reset(); p.setAntiAlias(true); p.setColor(skin.face);
-                c.drawArc(new RectF(90,50,910,870),skin.start,skin.sweep,true,p);
-                p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(4); p.setColor(skin.accent);
-                c.drawCircle(500,460,414,p);
-                p.setStrokeWidth(8); p.setColor(skin.pointer);
-                c.drawArc(new RectF(106,66,894,854),skin.start+skin.sweep*100/120,skin.sweep*20/120,false,p);
+        button.setBackground(states); button.setOnClickListener(action);
+        return button;
+    }
+    private LinearLayout row() {
+        LinearLayout row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL); return row;
+    }
+    private LinearLayout.LayoutParams weightedButton() {
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0,dp(48),1);
+        params.setMargins(dp(4),dp(4),dp(4),dp(4)); return params;
+    }
+    private LinearLayout header() {
+        LinearLayout header = row();
+        carText = label(18,0xffdce7f0); carText.setGravity(Gravity.CENTER_VERTICAL | Gravity.START);
+        carText.setTypeface(Typeface.create("sans-serif-condensed",Typeface.BOLD));
+        header.addView(carText,new LinearLayout.LayoutParams(0,dp(56),1));
+        skinButton = button("Skins ▾",new View.OnClickListener() { public void onClick(View view) { openSkins(); }});
+        header.addView(skinButton,new LinearLayout.LayoutParams(dp(100),dp(48)));
+        return header;
+    }
+    private void toggleDemo() {
+        if (!demo && !driveSession.demoVisible()) return;
+        demo=!demo; reading.clear(); speedWarning.reset(); audio.cancelChime();
+        if (demo) { stopGps(); demoStart=SystemClock.elapsedRealtime(); } else startGps();
+        refreshDashboard(SystemClock.elapsedRealtime());
+    }
+    private void buildDashboard() {
+        boolean landscape = getResources().getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE;
+        dashboard = new LinearLayout(this); dashboard.setOrientation(LinearLayout.VERTICAL);
+        dashboard.setPadding(dp(12),dp(8),dp(12),dp(8));
+        // Keep controls within the visible window, including cutout/system-bar insets.
+        dashboard.setOnApplyWindowInsetsListener(new View.OnApplyWindowInsetsListener() {
+            public WindowInsets onApplyWindowInsets(View view, WindowInsets insets) {
+                int left=insets.getSystemWindowInsetLeft(), top=insets.getSystemWindowInsetTop();
+                int right=insets.getSystemWindowInsetRight(), bottom=insets.getSystemWindowInsetBottom();
+                if (Build.VERSION.SDK_INT >= 28 && insets.getDisplayCutout() != null) {
+                    DisplayCutout cutout=insets.getDisplayCutout();
+                    left=Math.max(left,cutout.getSafeInsetLeft()); top=Math.max(top,cutout.getSafeInsetTop());
+                    right=Math.max(right,cutout.getSafeInsetRight()); bottom=Math.max(bottom,cutout.getSafeInsetBottom());
+                }
+                view.setPadding(dp(12)+left,dp(8)+top,dp(12)+right,dp(8)+bottom);
+                return insets;
             }
-            p.reset(); p.setColor(skin.background); c.drawRect(240,0,760,100,p);
-            text(c,skin.title,500,48,25,0xffd5dce2,false);
-            text(c,skin.code + "  /  SKINS ▾",500,80,16,0xffa5b4c0,false);
-            text(c,"UPDATES",125,59,19,Color.rgb(118,145,168),false);
-            if (demo || driveSession.demoVisible()) text(c,demo ? "EXIT DEMO" : "DEMO",875,59,19,demo?Color.rgb(255,167,76):Color.rgb(118,145,168),false);
-            for(int i=0;i<=120;i+=2) {
-                double a=skin.start+i*skin.sweep/120; boolean major=i%10==0;
-                line(c,x(400,a),y(400,a),x(major?367:382,a),y(major?367:382,a),skin == DashboardSkin.RB1 ? (major?0xff20c9ff:0xffe5f6ff) : skin.tick,major?5:2.5f,major && skin == DashboardSkin.RB1);
-                if(i%skin.labelStep==0) text(c,String.valueOf(i),x(317,a),y(317,a)+16,skin.labelStep==10?34:49,cyan,skin == DashboardSkin.RB1);
-            }
-            text(c,"mph",500,265,29,cyan,skin == DashboardSkin.RB1);
-            float target=(float)Math.min(120,Math.max(0,speed));
-            float dt=previous==0?0.033f:Math.min(.1f,(now-previous)/1000f);previous=now;
-            needle+=(target-needle)*(1-(float)Math.exp(-dt/0.13));
-            if(valid) {
-                double a=skin.start+needle*skin.sweep/120;
-                line(c,x(101,a+180),y(101,a+180),x(365,a),y(365,a),skin.pointer,7,skin == DashboardSkin.RB1);
-                line(c,x(100,a+180),y(100,a+180),x(361,a),y(361,a),skin == DashboardSkin.RB1 ? 0xffffa13a : skin.pointer,2,false);
-                p.reset();p.setAntiAlias(true);p.setColor(0xff060b12);c.drawCircle(500,460,17,p);
-                p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(2);p.setColor(0xff32445c);c.drawCircle(500,460,17,p);
-            }
-            p.reset();p.setAntiAlias(true);p.setColor(skin.face);c.drawCircle(500,460,220,p);
-            text(c,valid?String.format(Locale.US,"%.0f",speed):"—",500,474,133,cyan,skin == DashboardSkin.RB1);
-            text(c,demo?"SIMULATED SPEED":"GPS SPEED",500,520,18,skin == DashboardSkin.INTEGRA ? 0xff555a60 : demo?0xffffb15e:0xff7ba3bd,false);
-            // Digital readout sits above the moving needle, retaining legibility.
-            p.reset();p.setAntiAlias(true);p.setColor(skin == DashboardSkin.INTEGRA ? 0xffd8d9cd : 0xff050c19);c.drawRoundRect(382,557,618,618,10,10,p);
-            text(c,valid?String.format(Locale.US,"%03d MPH",Math.round(speed)):"--- MPH",500,599,28,cyan,skin == DashboardSkin.RB1);
-            String label=demo?"DEMO · TAP BELOW FOR LIVE GPS":fresh?"GPS CONNECTED":status.equals("GPS CONNECTED")?"SIGNAL LOST · WAITING FOR GPS":status;
-            p.setColor(demo?0xff2c1a0c:0xff061327);c.drawRoundRect(125,818,875,884,12,12,p);
-            text(c,label,500,858,21,demo?0xffffb15e:fresh?0xffb4efdb:0xffb4c3d0,false);
-            text(c,now < greetingUntil ? DriveAudio.GREETING : demo?"DISPLAY PREVIEW ONLY":fresh?String.format(Locale.US,"GPS accuracy ±%.0f m · PHONE GPS",accuracy):"USE OUTDOORS WITH A CLEAR VIEW OF THE SKY",500,920,16,0xff668097,false);
-            c.restore();
-            setContentDescription((valid?String.format(Locale.US,"%.0f miles per hour. %s",speed,demo?"Demo mode":"GPS connected"):label) + ". " + skin.label + ". Tap center header to choose a skin, top left for updates, " + (demo || driveSession.demoVisible() ? "top right for demo, " : "") + "bottom panel for GPS.");
-        }
-        @Override public boolean onTouchEvent(MotionEvent e) {
-            if(e.getAction()==MotionEvent.ACTION_UP) {
-                float x=(e.getX()-ox)/s,y=(e.getY()-oy)/s;
-                if(x>=0&&x<240&&y>=0&&y<110) { openUpdates(); performClick(); }
-                else if(x>=240&&x<=760&&y>=0&&y<110) { openSkins(); performClick(); }
-                else if(x>760&&y<110&&(demo||driveSession.demoVisible())) { demo=!demo; reading.clear(); speedWarning.reset(); audio.cancelChime(); if(demo) {stopGps();demoStart=SystemClock.elapsedRealtime();} else startGps(); performClick(); }
-                else if(y>790) { action(); performClick(); }
-                return true;
-            } return true;
-        }
-        @Override public boolean performClick() { super.performClick(); return true; }
+        });
+        if (!landscape) dashboard.addView(header(),new LinearLayout.LayoutParams(-1,dp(64)));
+        LinearLayout body = new LinearLayout(this);
+        body.setOrientation(landscape ? LinearLayout.HORIZONTAL : LinearLayout.VERTICAL);
+        dashboard.addView(body,new LinearLayout.LayoutParams(-1,0,1));
+        dial = new DashboardDial(this);
+        body.addView(dial,landscape ? new LinearLayout.LayoutParams(0,-1,1.45f) : new LinearLayout.LayoutParams(-1,0,1.55f));
+        LinearLayout panel = new LinearLayout(this); panel.setOrientation(LinearLayout.VERTICAL);
+        if (landscape) panel.setPadding(dp(16),0,0,0);
+        body.addView(panel,landscape ? new LinearLayout.LayoutParams(0,-1,1) : new LinearLayout.LayoutParams(-1,0,1));
+        if (landscape) panel.addView(header(),new LinearLayout.LayoutParams(-1,dp(56)));
+        speedText=label(landscape ? 84 : 100,0xff72efff);
+        speedText.setTypeface(Typeface.create("sans-serif-condensed",Typeface.NORMAL));
+        if (Build.VERSION.SDK_INT >= 26) speedText.setAutoSizeTextTypeUniformWithConfiguration(36,landscape?100:120,2,android.util.TypedValue.COMPLEX_UNIT_SP);
+        panel.addView(speedText,new LinearLayout.LayoutParams(-1,0,1));
+        sourceText=label(13,0xffa9bacb);
+        panel.addView(sourceText,new LinearLayout.LayoutParams(-1,dp(24)));
+        gpsButton=button("Enable GPS",new View.OnClickListener() { public void onClick(View view) { action(); refreshDashboard(SystemClock.elapsedRealtime()); }});
+        gpsButton.setTextSize(13);
+        LinearLayout.LayoutParams gpsParams=new LinearLayout.LayoutParams(-1,dp(52)); gpsParams.setMargins(0,dp(4),0,dp(4));
+        panel.addView(gpsButton,gpsParams);
+        LinearLayout controls=row();
+        controls.addView(button("Updates",new View.OnClickListener() { public void onClick(View view) { openUpdates(); }}),weightedButton());
+        demoButton=button("Demo",new View.OnClickListener() { public void onClick(View view) { toggleDemo(); }});
+        controls.addView(demoButton,weightedButton());
+        panel.addView(controls,new LinearLayout.LayoutParams(-1,dp(56)));
+        footerText=label(11,0xff8a9dad); footerText.setMaxLines(2);
+        panel.addView(footerText,new LinearLayout.LayoutParams(-1,dp(28)));
+        setContentView(dashboard); dashboard.requestApplyInsets();
+        refreshDashboard(SystemClock.elapsedRealtime());
+    }
+    private void refreshDashboard(long now) {
+        boolean fresh=reading.fresh(now), valid=demo||fresh;
+        double speed=speedAt(now);
+        dashboard.setBackgroundColor(skin.background);
+        setText(carText,skin.title + "  /  " + skin.code);
+        skinButton.setContentDescription("Choose dashboard skin. Current: " + skin.label);
+        int ink=skin == DashboardSkin.INTEGRA ? 0xfff0eee4 : skin.ink;
+        speedText.setTextColor(ink);
+        setText(speedText,valid?String.format(Locale.US,"%.0f",speed):"—");
+        speedText.setContentDescription(valid?String.format(Locale.US,"%.0f miles per hour",speed):"Speed unavailable");
+        setText(sourceText,demo?"mph  /  Simulated speed":"mph  /  GPS speed");
+        sourceText.setTextColor(demo?0xffffb15e:0xffa9bacb);
+        setText(demoButton,demo?"Exit demo":"Demo");
+        demoButton.setVisibility(demo||driveSession.demoVisible()?View.VISIBLE:View.INVISIBLE);
+        String label=demo?"Return to live GPS":fresh?"GPS connected":status.equals("GPS CONNECTED")?"Signal lost · Waiting for GPS":status;
+        setText(gpsButton,label);
+        gpsButton.setTextColor(demo?0xffffb15e:fresh?0xffb4efdb:0xffe4edf7);
+        setText(footerText,now<greetingUntil?DriveAudio.GREETING:demo?"Display preview only":fresh?String.format(Locale.US,"GPS accuracy ±%.0f m",accuracy):"Use outdoors with a clear view of the sky");
+        dial.update(skin,speed,valid,now);
     }
 }
