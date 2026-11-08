@@ -56,3 +56,10 @@ Still requires a physical phone: install over 1.1, greeting text/pronunciation w
 - Penpot MCP responded, but file inspection reported no connected plugin instance. No changes were made to the Penpot document.
 
 Physical-phone layout, accessibility/font-size settings, real GPS, and audio routing still need device verification. The owner reviewed the emulator previews and approved this redesign for release.
+
+## Version 1.4.1 — RB1 center-cover correction
+
+- Compared the RB1 artwork against the owner-provided gauge photo: https://wbandsons.goauction.co.uk/stock/34-22.jpg?v=63815360152553
+- RB1 now composites a large opaque black center disc over the needle, hiding its spindle and tail. The blue scale band is broader and minor ticks are white. The other four skins retain their exposed hubs.
+- Native build, both existing test suites, APK alignment, and signing verification passed. Captured and visually inspected RB1 demo previews in portrait and landscape on the Android 15 emulator; only the outer needle segment is visible.
+- Release version is 1.4.1 / code 8. The owner approved the correction for release; the existing package and signing key are preserved.

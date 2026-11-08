@@ -1,9 +1,9 @@
-The dashboard now uses more screen space and keeps every control outside the gauge.
+Corrects the Odyssey RB1 skin to better match the real instrument cluster.
 
-In portrait, a large dial sits above the digital speed and controls. In landscape, the dial sits beside a dedicated speed and controls panel. Native buttons provide larger touch targets and stay clear of system bars and display cutouts.
+A large opaque black center cover now hides the needle spindle and tail, leaving only the outer needle segment visible. The blue scale band is broader, with white minor ticks and cyan major markings.
 
-All five skins now feature beveled rims, recessed face lighting, shaded needles, and raised hubs. Static gauge artwork is cached for efficient animation. Skin selection, GPS speed in mph, demo mode, and the warning chime retain their existing behavior.
+The other four skins retain their existing exposed hubs. Responsive portrait and landscape layouts, GPS speed, demo mode, and audio behavior remain unchanged.
 
-Native compilation, both test suites, APK alignment, and signing checks passed locally. Android 15 emulator checks covered all five skins in both orientations, button sizing and separation, demo interaction, picker cancellation, and saved selection after restart. Physical-phone GPS, audio routing, and font-size/accessibility checks remain device-dependent.
+Native build, both test suites, APK alignment, and signing verification passed. The corrected RB1 skin was visually checked in portrait and landscape demo previews on the Android 15 emulator.
 
-Android 8.0 or newer. Uses the existing signing key for installation over prior versions. Download RB1-Speed.apk and open it to update without uninstalling the app.
+Android 8.0 or newer. Uses the existing signing key: install RB1-Speed.apk over the current app without uninstalling it.

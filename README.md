@@ -6,7 +6,7 @@ A native Android GPS speedometer with five JDM-inspired skins. A recessed analog
 
 Tap **Skins ▾** in the header to choose a car-inspired dashboard. The app remembers your selection across restarts; canceling keeps the current skin.
 
-- **Honda Odyssey Absolute RB1** — original luminous blue ring and cyan markings.
+- **Honda Odyssey Absolute RB1** — luminous blue scale, cyan markings, white minor ticks, and a large black center cover hiding the needle spindle and tail.
 - **Nissan Skyline GT-R R32** — dark analog face, condensed ivory markings, orange needle.
 - **Toyota Supra A80** — amber illumination, broad dial sweep, warm orange needle.
 - **Mazda RX-7 FD3S** — compact warm-white scale with labels every 10 mph and a red needle.

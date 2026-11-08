@@ -66,9 +66,9 @@ final class DashboardDial extends View {
             new float[]{0,.65f,1},Shader.TileMode.CLAMP));
         canvas.drawCircle(0,0,400,paint);
         if (skin==DashboardSkin.RB1) {
-            reset(0xffffffff); paint.setStyle(Paint.Style.STROKE); paint.setStrokeWidth(66);
-            paint.setShader(new RadialGradient(0,0,405,new int[]{0xff020611,0xff103fe8,0xff041338},new float[]{.72f,.88f,1},Shader.TileMode.CLAMP));
-            canvas.drawArc(new RectF(-350,-350,350,350),skin.start,skin.sweep,false,paint);
+            reset(0xffffffff); paint.setStyle(Paint.Style.STROKE); paint.setStrokeWidth(132);
+            paint.setShader(new RadialGradient(0,0,405,new int[]{0xff020611,0xff103fe8,0xff041338},new float[]{.56f,.79f,1},Shader.TileMode.CLAMP));
+            canvas.drawArc(new RectF(-320,-320,320,320),skin.start,skin.sweep,false,paint);
         } else {
             reset(skin.accent); paint.setStyle(Paint.Style.STROKE); paint.setStrokeWidth(2);
             canvas.drawCircle(0,0,390,paint);
@@ -79,15 +79,17 @@ final class DashboardDial extends View {
             double angle=Math.toRadians(skin.start+speed*skin.sweep/120);
             float cos=(float)Math.cos(angle), sin=(float)Math.sin(angle);
             boolean major=speed%10==0;
-            reset(skin.tick); paint.setStrokeWidth(major?5:2); paint.setStrokeCap(Paint.Cap.ROUND);
+            reset(skin==DashboardSkin.RB1 && !major ? 0xffe5f6ff : skin.tick); paint.setStrokeWidth(major?5:2); paint.setStrokeCap(Paint.Cap.ROUND);
             if (skin==DashboardSkin.RB1 && major) paint.setShadowLayer(7,0,0,skin.accent);
             canvas.drawLine(cos*377,sin*377,cos*(major?345:362),sin*(major?345:362),paint);
             if (speed%skin.labelStep==0) text(canvas,String.valueOf(speed),cos*302,sin*302+14,skin.labelStep==10?33:45,skin.ink);
         }
-        text(canvas,skin.title,0,-125,25,skin.ink);
-        text(canvas,"mph",0,-85,24,skin.ink);
-        text(canvas,skin.code,0,198,24,skin.ink);
-        text(canvas,"GPS SPEED",0,226,14,skin==DashboardSkin.INTEGRA?0xff565e63:0xff92a2b0);
+        if (skin != DashboardSkin.RB1) {
+            text(canvas,skin.title,0,-125,25,skin.ink);
+            text(canvas,"mph",0,-85,24,skin.ink);
+            text(canvas,skin.code,0,198,24,skin.ink);
+            text(canvas,"GPS SPEED",0,226,14,skin==DashboardSkin.INTEGRA?0xff565e63:0xff92a2b0);
+        }
         // Small reflected edge highlights communicate the glass and bezel depth.
         reset(0x667d95aa); paint.setStyle(Paint.Style.STROKE); paint.setStrokeWidth(2);
         canvas.drawArc(new RectF(-420,-420,420,420),205,95,false,paint);
@@ -116,12 +118,29 @@ final class DashboardDial extends View {
             canvas.drawPath(pointer,paint);
             canvas.restore();
         }
-        reset(0xff05070a); paint.setShadowLayer(8,0,7,0xaa000000); canvas.drawCircle(0,0,37,paint);
-        reset(0xffffffff); paint.setShader(new LinearGradient(-20,-35,20,35,new int[]{0xff7b8792,0xff151c24,0xff060a0e},null,Shader.TileMode.CLAMP));
-        canvas.drawCircle(0,0,34,paint);
-        circle(canvas,26,0xff101720);
-        reset(0xff6c7e8c); paint.setStyle(Paint.Style.STROKE); paint.setStrokeWidth(1);
-        canvas.drawArc(new RectF(-26,-26,26,26),205,115,false,paint);
+        if (skin==DashboardSkin.RB1) {
+            // The real RB1 masks the spindle and needle tail behind a large opaque disc.
+            // Composite this AFTER the pointer so only its outer segment remains visible.
+            reset(0xff000000); paint.setShadowLayer(7,0,4,0xcc000000);
+            canvas.drawCircle(0,0,245,paint);
+            reset(0xff000000);
+            paint.setShader(new RadialGradient(-65,-110,390,
+                new int[]{0xff080b10,0xff020305,0xff000000},null,Shader.TileMode.CLAMP));
+            canvas.drawCircle(0,0,245,paint);
+            reset(0x333b4856); paint.setStyle(Paint.Style.STROKE); paint.setStrokeWidth(1.5f);
+            canvas.drawArc(new RectF(-245,-245,245,245),205,100,false,paint);
+            text(canvas,skin.title,0,-80,25,skin.ink);
+            text(canvas,"mph",0,-40,24,skin.ink);
+            text(canvas,skin.code,0,150,24,skin.ink);
+            text(canvas,"GPS SPEED",0,178,14,0xff92a2b0);
+        } else {
+            reset(0xff05070a); paint.setShadowLayer(8,0,7,0xaa000000); canvas.drawCircle(0,0,37,paint);
+            reset(0xffffffff); paint.setShader(new LinearGradient(-20,-35,20,35,new int[]{0xff7b8792,0xff151c24,0xff060a0e},null,Shader.TileMode.CLAMP));
+            canvas.drawCircle(0,0,34,paint);
+            circle(canvas,26,0xff101720);
+            reset(0xff6c7e8c); paint.setStyle(Paint.Style.STROKE); paint.setStrokeWidth(1);
+            canvas.drawArc(new RectF(-26,-26,26,26),205,115,false,paint);
+        }
         canvas.restore();
     }
 }
