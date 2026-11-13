@@ -61,6 +61,7 @@ public class MainActivity extends Activity implements LocationListener {
             View.SYSTEM_UI_FLAG_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
         manager = (LocationManager)getSystemService(LOCATION_SERVICE);
         audio = new DriveAudio(this);
+        if (state == null) audio.setLaunchVolume();
         greetingShown = state != null && state.getBoolean("greetingShown", false);
         skin = DashboardSkin.fromId(getPreferences(MODE_PRIVATE).getString("skin", "rb1"));
         buildDashboard();

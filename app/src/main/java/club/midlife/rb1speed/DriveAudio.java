@@ -10,12 +10,14 @@ import android.speech.tts.UtteranceProgressListener;
 import android.speech.tts.Voice;
 import java.util.Set;
 
-/** Best-effort foreground audio. No network, background playback, or volume changes. */
+/** Best-effort foreground audio. No network or background playback. */
 final class DriveAudio {
     static final String GREETING = "安全運転で、いってらっしゃい";
     private static final long GREETING_DELAY_MS = 5000;
     private static final AudioAttributes ATTRIBUTES = new AudioAttributes.Builder()
         .setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build();
+    private static final AudioAttributes CHIME_ATTRIBUTES = new AudioAttributes.Builder()
+        .setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build();
     private final Context context;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final AudioManager manager;
@@ -28,7 +30,7 @@ final class DriveAudio {
         @Override public void run() { prepareGreeting(TextToSpeech.SUCCESS); }
     };
     private final Runnable finishChime = new Runnable() {
-        @Override public void run() { stopChime(); abandonFocus(); }
+        @Override public void run() { stopChime(); }
     };
 
     DriveAudio(Context context) {
@@ -48,7 +50,7 @@ final class DriveAudio {
             }, handler).build();
         try {
             short[] pcm = ChimeSound.samples();
-            chime = new AudioTrack.Builder().setAudioAttributes(ATTRIBUTES)
+            chime = new AudioTrack.Builder().setAudioAttributes(CHIME_ATTRIBUTES)
                 .setAudioFormat(new AudioFormat.Builder().setEncoding(AudioFormat.ENCODING_PCM_16BIT)
                     .setSampleRate(ChimeSound.SAMPLE_RATE).setChannelMask(AudioFormat.CHANNEL_OUT_MONO).build())
                 .setBufferSizeInBytes(pcm.length * 2).setTransferMode(AudioTrack.MODE_STATIC).build();
@@ -59,6 +61,16 @@ final class DriveAudio {
         } catch (RuntimeException e) {
             if (chime != null) chime.release();
             chime = null;
+        }
+    }
+
+    void setLaunchVolume() {
+        if (manager == null || manager.isVolumeFixed()) return;
+        try {
+            int maximum = manager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
+            manager.setStreamVolume(AudioManager.STREAM_MUSIC, Math.round(maximum * .5f), 0);
+        } catch (SecurityException ignored) {
+            // Device policy may prevent volume changes; opening the dashboard must still work.
         }
     }
 
@@ -106,22 +118,26 @@ final class DriveAudio {
     }
 
     void playChime() {
+        if (!active || closed) return;
         cancelGreeting();
-        if (chime == null || !requestFocus()) return;
         if (speech != null) speech.stop();
+        // Release any greeting focus, then mix the bell without asking music to duck.
+        abandonFocus();
+        if (chime == null) return;
         handler.removeCallbacks(finishChime);
         try {
             chime.stop();
-            if (chime.reloadStaticData() != AudioTrack.SUCCESS) { abandonFocus(); return; }
+            chimePlaying = false;
+            if (chime.reloadStaticData() != AudioTrack.SUCCESS) return;
             chime.play();
             chimePlaying = true;
             handler.postDelayed(finishChime, ChimeSound.DURATION_MS + 50);
-        } catch (IllegalStateException e) { abandonFocus(); }
+        } catch (IllegalStateException e) { stopChime(); }
     }
 
     void cancelChime() {
         if (chimePlaying) {
-            handler.removeCallbacks(finishChime); stopChime(); abandonFocus();
+            handler.removeCallbacks(finishChime); stopChime();
         }
     }
 

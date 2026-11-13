@@ -1,5 +1,18 @@
 # Validation
 
+## Launch media volume
+
+- Fresh Activity launches set STREAM_MUSIC to the nearest available step to 50% of its maximum. Saved-state recreation and ordinary resumes do not reset volume. The setting persists after exit and affects other media playback.
+- Added normal MODIFY_AUDIO_SETTINGS permission; fixed-volume devices are skipped and policy rejection does not prevent launch.
+- Native build, both model suites, APK alignment, and signing verification passed. Physical phone/Android Auto volume behavior remains unverified: check launch from a different media volume, adjust it manually, rotate and background/return, then confirm only a fresh launch resets it. Head-unit volume may be controlled separately.
+
+## Chime mixing without music ducking
+
+- Speed chimes now play as media sonification without requesting audio focus. Any greeting speech is stopped and its focus released before the bell starts. Chime completion/cancellation no longer manages greeting focus.
+- Foreground-only playback, warning timing, media volume, and spoken greeting focus behavior remain unchanged.
+- Native build, SpeedReading and DrivingFeatures checks, APK alignment, and v2/v3 signature verification passed locally.
+- Physical Sony/Android Auto verification remains required: while parked, play music, enter Demo, and confirm repeated bells mix without volume dips. Also check exiting demo and backgrounding stop the chime. No head-unit audio test was performed here.
+
 - Compiled against Android SDK 35 with Java 8 bytecode; D8 minimum API 26.
 - Built resource table and Android manifest with AAPT2.
 - Passed independent speed-model checks for conversion, freshness, accuracy filtering, invalid values, sample ordering, and reset.
