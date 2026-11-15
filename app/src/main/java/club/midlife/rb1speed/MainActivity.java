@@ -4,6 +4,10 @@ import android.Manifest;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Intent;
+import android.content.Context;
+import android.content.BroadcastReceiver;
+import android.content.IntentFilter;
+import android.hardware.*;
 import android.content.DialogInterface;
 import android.content.ActivityNotFoundException;
 import android.content.pm.PackageManager;
@@ -17,6 +21,7 @@ import android.widget.Toast;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Button;
+import android.widget.ScrollView;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.StateListDrawable;
 import android.content.res.Configuration;
@@ -35,6 +40,121 @@ public class MainActivity extends Activity implements LocationListener {
     private DriveAudio audio;
     private boolean demo, active, subscribed, asked;
     private boolean greetingShown;
+    private SensorManager sensors;
+    private boolean powered;
+    private float lux = Float.NaN;
+    private Location daylightLocation;
+    private final SensorEventListener lightListener = new SensorEventListener() {
+        public void onAccuracyChanged(Sensor sensor, int accuracy) {}
+        public void onSensorChanged(SensorEvent event) {
+            if (active && event.values.length > 0 && Float.isFinite(event.values[0]) && event.values[0] >= 0) {
+                lux = event.values[0]; updateBrightness();
+            }
+        }
+    };
+    private final BroadcastReceiver powerReceiver = new BroadcastReceiver() {
+        public void onReceive(Context context, Intent intent) {
+            if (Intent.ACTION_SCREEN_OFF.equals(intent.getAction())) {
+                greetingShown = false; greetingUntil = 0; audio.pause();
+                return;
+            }
+            boolean wasPowered = powered;
+            powered = intent.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) != 0;
+            if (active) {
+                updatePower();
+                if (powered && !wasPowered && ((PowerManager)getSystemService(POWER_SERVICE)).isInteractive()) greetOnce();
+            }
+        }
+    };
+    private void updatePower() {
+        if (powered) getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        else getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+    }
+    private void greetOnce() {
+        if (greetingShown) return;
+        greetingShown = true;
+        greetingUntil = SystemClock.elapsedRealtime() + 6000;
+        audio.resume(true);
+    }
+    private AlertDialog debugDialog;
+    private TextView debugText;
+    private float debugBrightness = -1f;
+    private long debugRefreshAt;
+    private String brightnessSource = "Waiting";
+    private final Runnable endBrightnessPreview = new Runnable() {
+        public void run() { debugBrightness = -1f; updateBrightness(); refreshDebug(); }
+    };
+    private long brightnessChecked;
+    private void updateBrightness() {
+        float ambient = lux;
+        java.util.Calendar clock = java.util.Calendar.getInstance();
+        boolean night = daylightLocation == null
+            ? clock.get(java.util.Calendar.HOUR_OF_DAY) < 7 || clock.get(java.util.Calendar.HOUR_OF_DAY) >= 19
+            : DisplayBrightness.isNight(System.currentTimeMillis(), daylightLocation.getLatitude(), daylightLocation.getLongitude());
+        float brightness = debugBrightness >= 0 ? debugBrightness : DisplayBrightness.level(ambient, night);
+        brightnessSource = debugBrightness >= 0 ? "Temporary test" : Float.isFinite(ambient) ? "Ambient sensor"
+            : (daylightLocation == null ? "Local clock fallback" : "GPS sunset/sunrise fallback") + (night ? " (night)" : " (day)");
+        WindowManager.LayoutParams attributes = getWindow().getAttributes();
+        if (attributes.screenBrightness != brightness) {
+            attributes.screenBrightness = brightness; getWindow().setAttributes(attributes);
+        }
+        if (debugDialog != null && debugDialog.getWindow() != null) {
+            WindowManager.LayoutParams panel = debugDialog.getWindow().getAttributes();
+            panel.screenBrightness = brightness; debugDialog.getWindow().setAttributes(panel);
+        }
+    }
+    private void previewBrightness(float value) {
+        debugBrightness = value;
+        handler.removeCallbacks(endBrightnessPreview);
+        handler.postDelayed(endBrightnessPreview, 5000);
+        updateBrightness(); refreshDebug();
+    }
+    private void refreshDebug() {
+        if (debugText == null) return;
+        boolean keepOn = (getWindow().getAttributes().flags & WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) != 0;
+        float output = getWindow().getAttributes().screenBrightness;
+        String timeout;
+        try { timeout = Settings.System.getInt(getContentResolver(), Settings.System.SCREEN_OFF_TIMEOUT) / 1000 + " seconds"; }
+        catch (Settings.SettingNotFoundException e) { timeout = "unavailable"; }
+        String sensor = sensors.getDefaultSensor(Sensor.TYPE_LIGHT) == null ? "not available" :
+            Float.isFinite(lux) ? String.format(Locale.US, "%.1f lux", lux) : "waiting for reading";
+        setText(debugText, "External power: " + (powered ? "connected" : "battery") +
+            "\nKeep screen on: " + (keepOn ? "enabled" : "disabled — normal timeout") +
+            "\nSystem timeout: " + timeout + "\n\n" + audio.volumeDiagnostics() +
+            "\nGreeting used this screen session: " + (greetingShown ? "yes" : "no") +
+            "\n\nLight sensor: " + sensor + "\nBrightness source: " + brightnessSource +
+            "\nRequested app brightness: " + (output < 0 ? "Android system setting" : Math.round(output * 100) + "%") +
+            "\n\nBrightness is an app request, not a measurement of panel output. Tests return to automatic control after five seconds.\n" +
+            "Cover/uncover the sensor or unplug/reconnect power to check live values. Touching controls restarts Android’s idle timer.");
+    }
+    private void openDebug() {
+        if (debugDialog != null) return;
+        LinearLayout content = new LinearLayout(this);
+        content.setOrientation(LinearLayout.VERTICAL); content.setPadding(dp(16), dp(8), dp(16), dp(8));
+        debugText = label(14, 0xffe4edf7); debugText.setGravity(Gravity.START);
+        debugText.setTextIsSelectable(true);
+        content.addView(debugText, new LinearLayout.LayoutParams(-1, -2));
+        content.addView(button("Apply 70% media volume", new View.OnClickListener() {
+            public void onClick(View view) { audio.setLaunchVolume(); refreshDebug(); }
+        }), new LinearLayout.LayoutParams(-1, dp(48)));
+        content.addView(button("Test dim · 5 seconds", new View.OnClickListener() {
+            public void onClick(View view) { previewBrightness(.08f); }
+        }), new LinearLayout.LayoutParams(-1, dp(48)));
+        content.addView(button("Test bright · 5 seconds", new View.OnClickListener() {
+            public void onClick(View view) { previewBrightness(1f); }
+        }), new LinearLayout.LayoutParams(-1, dp(48)));
+        ScrollView scroll = new ScrollView(this); scroll.addView(content);
+        debugDialog = new AlertDialog.Builder(this).setTitle("Debug · parked checks")
+            .setView(scroll).setPositiveButton("Close", null).create();
+        debugDialog.setOnDismissListener(new DialogInterface.OnDismissListener() {
+            public void onDismiss(DialogInterface dialog) {
+                handler.removeCallbacks(endBrightnessPreview);
+                debugBrightness = -1f; debugText = null; debugDialog = null;
+                if (active) updateBrightness();
+            }
+        });
+        debugDialog.show(); updateBrightness(); refreshDebug();
+    }
     private String status = "TAP TO ENABLE GPS";
     private float accuracy;
     private long demoStart;
@@ -44,6 +164,8 @@ public class MainActivity extends Activity implements LocationListener {
         public void run() {
             if (active) {
                 long now = SystemClock.elapsedRealtime();
+                if (debugText != null && now - debugRefreshAt >= 500) { debugRefreshAt = now; refreshDebug(); }
+                if (now - brightnessChecked >= 1000) { brightnessChecked = now; updateBrightness(); }
                 boolean live = !demo && reading.fresh(now);
                 driveSession.update(reading.mph(), live, now);
                 if (speedWarning.update(speedAt(now), demo || live, now)) audio.playChime();
@@ -54,7 +176,6 @@ public class MainActivity extends Activity implements LocationListener {
     };
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
-        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         getWindow().setStatusBarColor(Color.BLACK);
         getWindow().setNavigationBarColor(Color.BLACK);
         getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_FULLSCREEN |
@@ -64,20 +185,38 @@ public class MainActivity extends Activity implements LocationListener {
         if (state == null) audio.setLaunchVolume();
         greetingShown = state != null && state.getBoolean("greetingShown", false);
         skin = DashboardSkin.fromId(getPreferences(MODE_PRIVATE).getString("skin", "rb1"));
+        sensors = (SensorManager)getSystemService(SENSOR_SERVICE);
+        IntentFilter powerFilter = new IntentFilter(Intent.ACTION_BATTERY_CHANGED);
+        powerFilter.addAction(Intent.ACTION_SCREEN_OFF);
+        if (Build.VERSION.SDK_INT >= 33) registerReceiver(powerReceiver, powerFilter, Context.RECEIVER_NOT_EXPORTED);
+        else registerReceiver(powerReceiver, powerFilter);
         buildDashboard();
     }
     @Override public void onResume() {
         super.onResume(); active = true; demo = false; reading.clear();
         driveSession.reset(); speedWarning.reset();
-        boolean greet = !greetingShown;
-        if (greet) { greetingShown = true; greetingUntil = SystemClock.elapsedRealtime() + 6000; }
-        audio.resume(greet); startGps(); handler.post(ticker);
+        Intent battery = registerReceiver(null, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
+        powered = battery != null && battery.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) != 0;
+        updatePower();
+        lux = Float.NaN;
+        Sensor light = sensors.getDefaultSensor(Sensor.TYPE_LIGHT);
+        if (light != null) sensors.registerListener(lightListener, light, SensorManager.SENSOR_DELAY_NORMAL);
+        updateBrightness();
+        audio.resume(false); greetOnce(); startGps(); handler.post(ticker);
     }
     @Override public void onPause() {
         active = false; handler.removeCallbacks(ticker); audio.pause();
+        if (debugDialog != null) debugDialog.dismiss();
+        handler.removeCallbacks(endBrightnessPreview);
+        debugBrightness = -1f;
+        sensors.unregisterListener(lightListener);
+        getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        WindowManager.LayoutParams attributes = getWindow().getAttributes();
+        attributes.screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE;
+        getWindow().setAttributes(attributes);
         speedWarning.reset(); stopGps(); reading.clear(); super.onPause();
     }
-    @Override public void onDestroy() { audio.close(); super.onDestroy(); }
+    @Override public void onDestroy() { unregisterReceiver(powerReceiver); audio.close(); super.onDestroy(); }
     @Override public void onSaveInstanceState(Bundle state) {
         state.putBoolean("greetingShown", greetingShown); super.onSaveInstanceState(state);
     }
@@ -130,6 +269,7 @@ public class MainActivity extends Activity implements LocationListener {
         super.onRequestPermissionsResult(request, permissions, results); if (active && !demo) startGps();
     }
     @Override public void onLocationChanged(Location location) {
+        if (location.hasAccuracy() && location.getAccuracy() <= 1000) daylightLocation = new Location(location);
         if (demo) return;
         long now = SystemClock.elapsedRealtime();
         boolean accepted = location.hasAccuracy() && reading.accept(location.getSpeed(), location.hasSpeed(), location.getAccuracy(),
@@ -233,6 +373,9 @@ public class MainActivity extends Activity implements LocationListener {
         controls.addView(button("Updates",new View.OnClickListener() { public void onClick(View view) { openUpdates(); }}),weightedButton());
         demoButton=button("Demo",new View.OnClickListener() { public void onClick(View view) { toggleDemo(); }});
         controls.addView(demoButton,weightedButton());
+        controls.addView(button("Debug", new View.OnClickListener() {
+            public void onClick(View view) { openDebug(); }
+        }), weightedButton());
         panel.addView(controls,new LinearLayout.LayoutParams(-1,dp(56)));
         footerText=label(11,0xff8a9dad); footerText.setMaxLines(2);
         panel.addView(footerText,new LinearLayout.LayoutParams(-1,dp(28)));

@@ -68,10 +68,21 @@ final class DriveAudio {
         if (manager == null || manager.isVolumeFixed()) return;
         try {
             int maximum = manager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
-            manager.setStreamVolume(AudioManager.STREAM_MUSIC, Math.round(maximum * .5f), 0);
+            manager.setStreamVolume(AudioManager.STREAM_MUSIC, Math.round(maximum * .7f), 0);
         } catch (SecurityException ignored) {
             // Device policy may prevent volume changes; opening the dashboard must still work.
         }
+    }
+
+    String volumeDiagnostics() {
+        if (manager == null) return "Media volume: audio service unavailable";
+        int maximum = manager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
+        int current = manager.getStreamVolume(AudioManager.STREAM_MUSIC);
+        return "Media volume: " + current + "/" + maximum + " (" +
+            (maximum > 0 ? Math.round(100f * current / maximum) : 0) + "%)" +
+            "\n70% target: step " + Math.round(maximum * .7f) +
+            "\nFixed volume: " + (manager.isVolumeFixed() ? "yes" : "no") +
+            "\nGreeting: " + (pendingGreeting ? "waiting for five-second delay / offline voice" : "no speech pending");
     }
 
     void resume(boolean greet) {
@@ -80,6 +91,7 @@ final class DriveAudio {
             pendingGreeting = true;
             greetingAt = SystemClock.elapsedRealtime() + GREETING_DELAY_MS;
             greetingDeadline = greetingAt + 6000;
+            if (speech != null) speech.shutdown();
             speech = new TextToSpeech(context, new TextToSpeech.OnInitListener() {
                 @Override public void onInit(final int result) {
                     handler.post(new Runnable() { @Override public void run() { prepareGreeting(result); } });

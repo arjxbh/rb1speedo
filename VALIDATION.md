@@ -1,3 +1,20 @@
+# Version 1.5.1 — debug panel
+
+- Added a scrollable Debug dialog accessible alongside Demo. Reads actual STREAM_MUSIC steps, fixed-volume status, pending greeting state, sensor availability/lux, power state, Activity keep-screen-on flag, normal timeout, and app brightness request. Refreshes twice per second while open.
+- Manual volume action uses the same launch-volume path. Dim/bright previews apply to both dashboard and dialog windows and reset after five seconds, dismissal, or pause. No new permissions or persisted debug overrides.
+- Native build, all three model suites, APK alignment and v2/v3 signing passed. No connected device was available; dialog layout, sensor response, volume readback and preview cleanup still require physical testing.
+- Parked checks: open Debug in both orientations; compare volume readback against hardware volume buttons, apply 70%, cover/uncover sensor, unplug/reconnect charger, run each brightness preview and wait five seconds, then repeat closing/backgrounding during preview. Confirm scrolling exposes all controls and normal timeout still works without touching the screen.
+
+# Version 1.5 — mounted-phone behavior
+
+- Native build, SpeedReading, DrivingFeatures, and DisplayBrightness suites passed; APK alignment and v2/v3 signatures passed with the existing development certificate.
+- Brightness checks cover sensor bounds/monotonic response, ambient override, missing-sensor fallback, east/west longitude, and polar day/night.
+- Reviewed lifecycle wiring: sticky battery plugged state on resume; live battery changes; screen-off rearming; receiver cleanup; sensor unregister and brightness/keep-awake release on pause. No new permissions.
+- No Android device or emulator was connected during validation. Hardware and lifecycle behavior have not been exercised on-device.
+- While parked, verify: start on battery and hear greeting after about five seconds; connect USB and confirm display stays awake beyond normal timeout; disconnect and confirm normal timeout; reconnect before timeout and confirm no repeat greeting; let screen turn off, then wake/resume and confirm a new greeting. Repeat with a full battery and a charger reported as AC.
+- Cover/uncover the light sensor and check brightness; check volume starts near 70%, manual adjustments survive rotation/background return, and brightness returns to system control after leaving the app. Test offline Japanese TTS availability, pause-before-five-seconds cancellation, and both landscape mounting directions.
+- Android’s developer “Stay awake while charging” setting must be disabled to isolate app timeout behavior. This implementation does not auto-launch or unlock the phone.
+
 # Validation
 
 ## Launch media volume
