@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const cdk = require('aws-cdk-lib');
 const { Template } = require('aws-cdk-lib/assertions');
 const { DashcamStack } = require('../stack.cjs');
-const { assertTemplate, assertChanges } = require('../scripts/deploy.cjs');
+const { assertTemplate, assertChanges, discover, parseAwsOutput, readStackPolicy } = require('../scripts/deploy.cjs');
 const host = 'i-00000000000000000', role = 'ValidationOnlyRole';
 const app = new cdk.App();
 const template = Template.fromStack(new DashcamStack(app, 'RB1DashcamStack', { env: { account: '123456789012', region: 'us-east-1' },
@@ -60,4 +60,50 @@ test('host install script preserves root Caddy configuration and isolates servic
   assert.match(shell, /shared-caddy-deploy.lock/); assert.match(shell, /thecrankygoose.net/);
   assert.match(shell, /sha256sum --check/); assert.match(shell, /trap rollback EXIT/);
   assert.doesNotMatch(shell, />\s*\/etc\/caddy\/Caddyfile|systemctl (?:restart|stop) (?:caddy|piggyledger|kaedama|cranky)/);
+});
+test('only a successful optional stack-policy lookup accepts empty CLI output', () => {
+  assert.deepEqual(parseAwsOutput('', 'cloudformation', 'get-stack-policy'), {});
+  assert.deepEqual(parseAwsOutput(' \n', 'cloudformation', 'get-stack-policy'), {});
+  for (const response of [{}, null, { StackPolicyBody: null }]) {
+    assert.equal(readStackPolicy(() => response, 'MidlifeMotorClubStack'), null);
+  }
+  const policy = '{"Statement":[]}';
+  assert.equal(readStackPolicy(() => ({ StackPolicyBody: policy }), 'MidlifeMotorClubStack'), policy);
+  assert.throws(() => parseAwsOutput('', 'cloudformation', 'describe-stacks'), /empty output/);
+  assert.throws(() => parseAwsOutput('not JSON', 'cloudformation', 'get-stack-policy'));
+  assert.throws(() => readStackPolicy(() => [], 'MidlifeMotorClubStack'), /Unexpected stack policy response/);
+  assert.throws(() => readStackPolicy(() => { throw Object.assign(new Error('CLI failed'), { stderr: Buffer.from('AccessDenied') }); },
+    'MidlifeMotorClubStack'), /MidlifeMotorClubStack: AccessDenied/);
+  assert.throws(() => readStackPolicy(() => { throw new Error('ExpiredToken'); }, 'MidlifeMotorClubStack'), /ExpiredToken/);
+});
+function fakeDiscovery({ piggyPolicy = true, policyError } = {}) {
+  return (service, operation, args = []) => {
+    const name = args[1];
+    if (operation === 'describe-stack-resources') return { StackResources: [{ ResourceType: 'AWS::EC2::Instance', PhysicalResourceId: host }] };
+    if (operation === 'describe-instances') return { Reservations: [{ Instances: [{ InstanceId: host, ImageId: 'ami-test',
+      State: { Name: 'running' }, IamInstanceProfile: { Arn: 'arn:aws:iam::123456789012:instance-profile/test' }, PublicIpAddress: '192.0.2.1' }] }] };
+    if (operation === 'get-instance-profile') return { InstanceProfile: { Roles: [{ RoleName: role }] } };
+    if (operation === 'list-role-policies') return { PolicyNames: [] };
+    if (operation === 'list-attached-role-policies') return { AttachedPolicies: [] };
+    if (operation === 'list-associations') return { Associations: ['PiggyLedgerStack-app-deployment', 'MidlifeMotorClubStack-site-deployment',
+      'KaedamaStack-site-deployment', 'CrankyGooseStack-site-deployment'].map(AssociationName => ({ AssociationName,
+      Overview: { Status: 'Success' }, Targets: [{ Key: 'InstanceIds', Values: [host] }] })) };
+    if (operation === 'describe-stacks') return { Stacks: [{ StackId: name, StackStatus: 'UPDATE_COMPLETE' }] };
+    if (operation === 'get-template') return { TemplateBody: { Resources: {} } };
+    if (operation === 'get-stack-policy') {
+      if (name === 'MidlifeMotorClubStack' && policyError) throw new Error(policyError);
+      if (name === 'PiggyLedgerStack' && piggyPolicy) return { StackPolicyBody: fs.readFileSync(require.resolve('../expected-shared-stack-policy.json'), 'utf8') };
+      return parseAwsOutput('', service, operation);
+    }
+    throw new Error('Unexpected discovery operation: ' + operation);
+  };
+}
+test('discovery preserves absent optional policies while keeping PiggyLedger protection mandatory', () => {
+  const snapshot = discover(fakeDiscovery());
+  assert.equal(snapshot.stacks.MidlifeMotorClubStack.policy, null);
+  assert.equal(snapshot.stacks.KaedamaStack.policy, null);
+  assert.equal(snapshot.stacks.CrankyGooseStack.policy, null);
+  assert.ok(snapshot.stacks.PiggyLedgerStack.policy);
+  assert.throws(() => discover(fakeDiscovery({ piggyPolicy: false })), /Shared host stack protection missing or changed/);
+  assert.throws(() => discover(fakeDiscovery({ policyError: 'AccessDenied' })), /MidlifeMotorClubStack: AccessDenied/);
 });

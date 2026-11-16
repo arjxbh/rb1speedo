@@ -1,3 +1,9 @@
+# Deployment parser fix after 1.6.0
+
+- A successful AWS CLI `get-stack-policy` can emit an empty response for a stack with no policy. The deployment parser now records this optional absence without swallowing AWS command failures or empty output from unrelated discovery operations.
+- Piggy Ledger's exact mandatory protection policy is still checked; all four existing stack snapshots are still preserved. Permission, credential and malformed-response failures stop deployment with their underlying diagnostic.
+- All 20 API/CDK tests passed, including regressions for absent policies on the three dependent sites, missing Piggy Ledger protection, and access-denied/expired-token failures. No Android changes, AWS deployment, or production mutations were performed for this fix.
+
 # Version 1.6.0 — dashcam and isolated upload infrastructure
 
 - Native Android compilation, SpeedReading, DrivingFeatures, DisplayBrightness and DashcamPolicy suites passed; APK alignment and existing-certificate v2/v3 signing passed.

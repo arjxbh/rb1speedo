@@ -39,6 +39,8 @@ npm run deploy -- --profile YOUR_PROFILE --domain dashcam.midlifemotor.club
 
 The script checks account, existing stack policies/templates, running host ID/AMI/IP/profile, existing inline and attached role policies, successful SSM associations for **all four** applications, apex sites, www redirects, Piggy Ledger API health, and Kaedama's quote endpoint. A missing dependency or failed health check blocks preparation.
 
+A successful empty `GetStackPolicy` response is recorded as no policy for the three dependent application stacks. Piggy Ledger's exact shared-host protection policy remains mandatory. AWS permission/credential failures and malformed responses still block deployment and include the underlying error; they are never treated as an absent policy.
+
 It runs tests, synthesizes, diffs, and prepares a CloudFormation change set using `--no-execute`. It rejects resource types outside the RB1 allowlist, a broad/changed SSM target, any removal, and any replacement, including conditional replacement. The CloudFormation template retains the data resources. Review the exact template, changes, host snapshot, IAM permissions, and SSM script recorded in ignored `infra/review.json`. Its CloudFormation change-set ARN, not a newly synthesized template, is used for execution.
 
 Preparation can publish the RB1 asset and create a CloudFormation review change set. It does **not** execute the SSM installation or change the running applications.

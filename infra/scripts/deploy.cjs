@@ -12,6 +12,27 @@ const DEPENDENTS = ['PiggyLedgerStack-app-deployment', 'MidlifeMotorClubStack-si
 const ALLOWED = new Set(['AWS::S3::Bucket', 'AWS::S3::BucketPolicy', 'AWS::DynamoDB::Table',
   'AWS::IAM::Policy', 'AWS::SSM::Association', 'AWS::CDK::Metadata', 'AWS::CloudTrail::Trail', 'AWS::CloudWatch::Alarm']);
 const digest = value => crypto.createHash('sha256').update(typeof value === 'string' ? value : JSON.stringify(value)).digest('hex');
+function parseAwsOutput(output, service, operation) {
+  const text = output.trim();
+  // A successful GetStackPolicy with no installed policy can produce no CLI output.
+  // Do not generalize this exception to failed commands or other discovery operations.
+  if (!text && service === 'cloudformation' && operation === 'get-stack-policy') return {};
+  if (!text) throw new Error(`AWS CLI returned empty output for ${service} ${operation}`);
+  return JSON.parse(text);
+}
+function readStackPolicy(aws, name) {
+  try {
+    const result = aws('cloudformation', 'get-stack-policy', ['--stack-name', name]);
+    if (result == null) return null;
+    if (typeof result !== 'object' || Array.isArray(result)) throw new Error('Unexpected stack policy response');
+    if (result.StackPolicyBody == null || result.StackPolicyBody === '') return null;
+    if (typeof result.StackPolicyBody !== 'string') throw new Error('Unexpected StackPolicyBody response');
+    return result.StackPolicyBody;
+  } catch (e) {
+    const detail = e.stderr?.toString().trim() || e.message;
+    throw new Error(`Unable to inspect dependent stack policy: ${name}: ${detail}`, { cause: e });
+  }
+}
 function assertTemplate(template, host, role) {
   for (const [logical, r] of Object.entries(template.Resources || {})) {
     if (!ALLOWED.has(r.Type)) throw new Error('Forbidden resource type: ' + r.Type);
@@ -99,9 +120,7 @@ function discover(aws) {
     const s = aws('cloudformation', 'describe-stacks', ['--stack-name', name]).Stacks[0];
     if (!['CREATE_COMPLETE', 'UPDATE_COMPLETE', 'UPDATE_ROLLBACK_COMPLETE'].includes(s.StackStatus)) throw new Error('Dependent stack busy: ' + name);
     const template = aws('cloudformation', 'get-template', ['--stack-name', name]).TemplateBody;
-    let policy;
-    try { policy = aws('cloudformation', 'get-stack-policy', ['--stack-name', name]).StackPolicyBody || null; }
-    catch (e) { throw new Error('Unable to inspect dependent stack policy: ' + name, { cause: e }); }
+    const policy = readStackPolicy(aws, name);
     if (name === 'PiggyLedgerStack') {
       const expected = JSON.parse(fs.readFileSync(path.join(ROOT, 'infra/expected-shared-stack-policy.json')));
       if (!policy || !isDeepStrictEqual(JSON.parse(policy), expected)) throw new Error('Shared host stack protection missing or changed');
@@ -122,9 +141,9 @@ async function main(args) {
   }
   if (!/^[a-z0-9]+([.-][a-z0-9]+)*\.[a-z]{2,}$/.test(domain)) throw new Error('Invalid domain');
   if (SITES.some(site => domain === site || domain === 'www.' + site)) throw new Error('Cannot take over an existing site hostname');
-  const aws = (service, operation, rest = []) => JSON.parse(execFileSync('aws', [service, operation,
+  const aws = (service, operation, rest = []) => parseAwsOutput(execFileSync('aws', [service, operation,
     '--region', REGION, ...(profile ? ['--profile', profile] : []), '--no-cli-pager', '--output', 'json', ...rest],
-  { encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 }));
+  { encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 }), service, operation);
   if (aws('sts', 'get-caller-identity').Account !== ACCOUNT) throw new Error('Wrong AWS account');
   const snapshot = discover(aws); await health();
   const reviewFile = path.join(ROOT, 'infra/review.json');
@@ -169,5 +188,5 @@ async function main(args) {
   if (!r.ok || (await r.json()).service !== 'rb1-dashcam') throw new Error('RB1 endpoint unhealthy');
   console.log('RB1 deployed; shared instance, AMI, IP, all existing templates/policies and all four sites verified unchanged.');
 }
-module.exports = { assertTemplate, assertChanges, discover, health };
+module.exports = { assertTemplate, assertChanges, discover, health, parseAwsOutput, readStackPolicy };
 if (require.main === module) main(process.argv.slice(2)).catch(e => { console.error(e.message); process.exitCode = 1; });
