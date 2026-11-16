@@ -38,6 +38,35 @@ function assertOwnerTemplate(template, tableName) {
     if (resources.filter(([, r]) => r.Type === type).length !== 1) throw new Error('Expected exactly one ' + type);
   }
 }
+function assertOwnerChanges(cs, template, loadPrevious) {
+  const checked = structuredClone(cs);
+  for (const { ResourceChange: r } of checked.Changes || []) {
+    if (r?.Replacement !== 'Conditional' || r.ResourceType !== 'AWS::Lambda::Url') continue;
+    const url = template.Resources[r.LogicalResourceId];
+    const target = url?.Properties?.TargetFunctionArn?.['Fn::GetAtt'];
+    if (!Array.isArray(target) || target[1] !== 'Arn') continue;
+    const functionId = target[0];
+    const change = cs.Changes.find(c => c.ResourceChange?.LogicalResourceId === functionId)?.ResourceChange;
+    if (r.Action !== 'Modify' || !isDeepStrictEqual(r.Scope, ['Properties']) ||
+      !isDeepStrictEqual(r.Details, [{ Target: { Attribute: 'Properties', Name: 'TargetFunctionArn', RequiresRecreation: 'Always' },
+        Evaluation: 'Dynamic', ChangeSource: 'ResourceAttribute', CausingEntity: functionId + '.Arn' }]) ||
+      change?.Action !== 'Modify' || change.ResourceType !== 'AWS::Lambda::Function' || change.Replacement !== 'False' ||
+      !change.Details?.length || !change.Details.every(d => d.Target?.RequiresRecreation === 'Never' &&
+        (d.Target.Attribute === 'Metadata' || (d.Target.Attribute === 'Properties' && d.Target.Name === 'Code')))) continue;
+    const previous = loadPrevious();
+    const withoutCode = resource => {
+      const copy = structuredClone(resource);
+      if (copy) { delete copy.Metadata; if (copy.Properties) delete copy.Properties.Code; }
+      return copy;
+    };
+    if (!isDeepStrictEqual(previous.Resources[r.LogicalResourceId], url) ||
+      !isDeepStrictEqual(withoutCode(previous.Resources[functionId]), withoutCode(template.Resources[functionId]))) continue;
+    // Code-only updates retain the function ARN. The unchanged URL's dynamic
+    // dependency cannot trigger the conditional target-ARN replacement.
+    r.Replacement = 'False';
+  }
+  assertChanges(checked, template);
+}
 function snapshot(aws) {
   const shared = discover(aws);
   const stack = aws('cloudformation', 'describe-stacks', ['--stack-name', 'RB1DashcamStack']).Stacks[0];
@@ -81,6 +110,10 @@ async function main(args) {
   console.log('Checking the existing RB1 stack, shared host, all four applications, and their policies.');
   const before = snapshot(aws); await health(); await checkPhoneApi(before.parent.outputs.ApiUrl);
   const reviewFile = path.join(ROOT, 'infra/owner-review.json');
+  const previousTemplate = () => {
+    const body = aws('cloudformation', 'get-template', ['--stack-name', STACK, '--template-stage', 'Original']).TemplateBody;
+    return typeof body === 'string' ? JSON.parse(body) : body;
+  };
   if (verify) {
     const review = JSON.parse(fs.readFileSync(reviewFile));
     assertOwnerTemplate(review.template, before.parent.outputs.TableName);
@@ -102,7 +135,7 @@ async function main(args) {
     const name = 'rb1-owner-reviewed-' + Date.now();
     cdk(['deploy', STACK, '--no-execute', '--change-set-name', name, '--require-approval', 'broadening']);
     const cs = aws('cloudformation', 'describe-change-set', ['--stack-name', STACK, '--change-set-name', name]);
-    assertChanges(cs, template);
+    assertOwnerChanges(cs, template, previousTemplate);
     fs.writeFileSync(reviewFile, JSON.stringify({ preparedAt: Date.now(), snapshot: before, template,
       changeSet: cs.ChangeSetId, changes: cs.Changes }, null, 2), { mode: 0o600 });
     console.log('Prepared only. Review infra/owner-review.json, then npm run deploy:owner -- --execute with the same profile.');
@@ -112,7 +145,7 @@ async function main(args) {
   if (Date.now() - review.preparedAt > 3600000 || !isDeepStrictEqual(review.snapshot, before)) throw new Error('Review expired or dependencies changed; prepare again');
   assertOwnerTemplate(review.template, before.parent.outputs.TableName);
   const cs = aws('cloudformation', 'describe-change-set', ['--change-set-name', review.changeSet]);
-  assertChanges(cs, review.template);
+  assertOwnerChanges(cs, review.template, previousTemplate);
   const actual = aws('cloudformation', 'get-template', ['--stack-name', STACK, '--change-set-name', review.changeSet, '--template-stage', 'Original']).TemplateBody;
   if (!isDeepStrictEqual(typeof actual === 'string' ? JSON.parse(actual) : actual, review.template) || !isDeepStrictEqual(cs.Changes, review.changes)) throw new Error('Reviewed owner change set differs');
   const waiter = executionWaiter(aws('cloudformation', 'describe-stacks', ['--stack-name', STACK]).Stacks[0].StackStatus);
@@ -125,5 +158,5 @@ async function main(args) {
   console.log('Owner pairing endpoint deployed with IAM authentication; RB1 and all four shared-host applications preserved.');
   console.log('Generate a code from your laptop with: npm run pair' + (profile ? ' -- --profile ' + profile : ''));
 }
-module.exports = { assertOwnerTemplate, snapshot, verifyOwnerDeployment };
+module.exports = { assertOwnerTemplate, assertOwnerChanges, snapshot, verifyOwnerDeployment };
 if (require.main === module) main(process.argv.slice(2)).catch(e => { console.error(e.stderr?.toString().trim() || e.message); process.exitCode = 1; });

@@ -7,9 +7,39 @@ const lambda = require('aws-cdk-lib/aws-lambda');
 const { Template } = require('aws-cdk-lib/assertions');
 const { createHandler } = require('../index.cjs');
 const { OwnerStack } = require('../../infra/owner-stack.cjs');
-const { assertOwnerTemplate, verifyOwnerDeployment } = require('../../infra/scripts/deploy-owner.cjs');
+const { assertOwnerTemplate, assertOwnerChanges, verifyOwnerDeployment } = require('../../infra/scripts/deploy-owner.cjs');
 const { requestCode, endpointFromStack } = require('../../scripts/pair.cjs');
 const account = '123456789012', table = 'ValidationMetadata';
+test('owner update permits only unchanged URL dependency on a proven code-only function update', () => {
+  const previous = { Resources: {
+    Fn: { Type: 'AWS::Lambda::Function', Properties: { Code: { S3Key: 'old' }, Runtime: 'nodejs24.x' } },
+    Url: { Type: 'AWS::Lambda::Url', Properties: { AuthType: 'AWS_IAM', TargetFunctionArn: { 'Fn::GetAtt': ['Fn', 'Arn'] } } }
+  } };
+  const next = structuredClone(previous); next.Resources.Fn.Properties.Code.S3Key = 'new';
+  const cs = { Status: 'CREATE_COMPLETE', ExecutionStatus: 'AVAILABLE', Changes: [
+    { Type: 'Resource', ResourceChange: { Action: 'Modify', LogicalResourceId: 'Fn', ResourceType: 'AWS::Lambda::Function',
+      Replacement: 'False', Details: [{ Target: { Attribute: 'Properties', Name: 'Code', RequiresRecreation: 'Never' } }] } },
+    { Type: 'Resource', ResourceChange: { Action: 'Modify', LogicalResourceId: 'Url', ResourceType: 'AWS::Lambda::Url',
+      Replacement: 'Conditional', Scope: ['Properties'], Details: [{
+        Target: { Attribute: 'Properties', Name: 'TargetFunctionArn', RequiresRecreation: 'Always' },
+        Evaluation: 'Dynamic', ChangeSource: 'ResourceAttribute', CausingEntity: 'Fn.Arn' }] } }
+  ] };
+  assert.doesNotThrow(() => assertOwnerChanges(cs, next, () => previous));
+  assert.equal(cs.Changes[1].ResourceChange.Replacement, 'Conditional');
+  for (const mutate of [
+    t => { t.Resources.Url.Properties.AuthType = 'NONE'; },
+    t => { t.Resources.Fn.Properties.FunctionName = 'different'; },
+    t => { t.Resources.Fn.Properties.Runtime = 'nodejs22.x'; },
+    t => { t.Resources.Url.Properties.TargetFunctionArn = { 'Fn::GetAtt': ['Other', 'Arn'] }; }
+  ]) {
+    const bad = structuredClone(next); mutate(bad);
+    assert.throws(() => assertOwnerChanges(cs, bad, () => previous));
+  }
+  const replacement = structuredClone(cs); replacement.Changes[0].ResourceChange.Replacement = 'True';
+  assert.throws(() => assertOwnerChanges(replacement, next, () => previous));
+  const direct = structuredClone(cs); direct.Changes[1].ResourceChange.Details[0].ChangeSource = 'DirectModification';
+  assert.throws(() => assertOwnerChanges(direct, next, () => previous));
+});
 function event() { return { version: '2.0', rawPath: '/pairing-codes', body: '{}',
   requestContext: { requestId: 'unit-test', http: { method: 'POST' },
     authorizer: { iam: { accountId: account, userArn: `arn:aws:sts::${account}:assumed-role/Owner/session` } } } }; }
@@ -27,6 +57,7 @@ test('owner issuance produces a one-use-compatible 256-bit code and stores only 
   const item = f.calls[1].input.Item;
   assert.equal(item.pk.S, 'PAIR#' + crypto.createHash('sha256').update(data.code).digest('hex'));
   assert.equal(item.sk.S, 'META'); assert.equal(item.used.BOOL, false);
+  assert.equal(item.version.N, '1');
   assert.equal(Number(item.expiresAt.N), data.expiresAt);
   assert.ok(!JSON.stringify(f.calls).includes(data.code)); assert.ok(!f.audit.join('').includes(data.code));
 });
@@ -36,7 +67,8 @@ test('a Lambda-issued code enrolls through the existing phone API exactly once',
   const k = key => key.pk + '|' + key.sk;
   const item = Object.fromEntries(Object.entries(f.calls[1].input.Item).map(([key, value]) =>
     [key, value.S ?? (value.N ? Number(value.N) : value.BOOL)]));
-  map.set(k(item), { ...item, version: 1 });
+  // Use the actual Lambda item; do not inject a version that production did not write.
+  map.set(k(item), item);
   const db = {
     get: async key => structuredClone(map.get(k(key)) || null),
     create: async (key, data) => { map.set(k(key), { ...key, ...data, version: 1 }); },

@@ -34,7 +34,7 @@ function createHandler({ send, table, account, apiUrl, now = () => Math.floor(Da
       const expiresAt = time + 600;
       await send(new PutItemCommand({ TableName: table, Item: {
         pk: { S: 'PAIR#' + crypto.createHash('sha256').update(code).digest('hex') }, sk: { S: 'META' },
-        expiresAt: { N: String(expiresAt) }, used: { BOOL: false }, createdBy: { S: identity.userArn }
+        expiresAt: { N: String(expiresAt) }, used: { BOOL: false }, version: { N: '1' }, createdBy: { S: identity.userArn }
       }, ConditionExpression: 'attribute_not_exists(pk)' }));
       // Never log the event, response, credentials, code or code verifier.
       audit(JSON.stringify({ event: 'pairing_code_issued', principal: identity.userArn,
