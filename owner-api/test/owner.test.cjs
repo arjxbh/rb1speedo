@@ -7,7 +7,7 @@ const lambda = require('aws-cdk-lib/aws-lambda');
 const { Template } = require('aws-cdk-lib/assertions');
 const { createHandler } = require('../index.cjs');
 const { OwnerStack } = require('../../infra/owner-stack.cjs');
-const { assertOwnerTemplate } = require('../../infra/scripts/deploy-owner.cjs');
+const { assertOwnerTemplate, verifyOwnerDeployment } = require('../../infra/scripts/deploy-owner.cjs');
 const { requestCode, endpointFromStack } = require('../../scripts/pair.cjs');
 const account = '123456789012', table = 'ValidationMetadata';
 function event() { return { version: '2.0', rawPath: '/pairing-codes', body: '{}',
@@ -94,6 +94,24 @@ test('owner guard rejects public URL, existing role attachment, and broader Dyna
   const statements = Object.values(tableWrite.Resources).find(r => r.Type === 'AWS::IAM::Policy').Properties.PolicyDocument.Statement;
   const ddb = statements.find(s => [].concat(s.Action).includes('dynamodb:PutItem')); delete ddb.Condition;
   assert.throws(() => assertOwnerTemplate(tableWrite, table), /pairing records/);
+});
+test('completed owner verification performs reads only and checks IAM, unchanged dependencies and template', async () => {
+  const current = { parent: { outputs: { ApiUrl: 'https://dashcam.example.com' } }, shared: { host: 'i-original' } };
+  const review = { template, snapshot: current }, endpoint = 'https://test.lambda-url.us-east-1.on.aws/';
+  const calls = [];
+  const aws = (service, operation) => {
+    calls.push(operation);
+    if (operation === 'describe-stacks') return { Stacks: [{ StackStatus: 'CREATE_COMPLETE', Outputs: [
+      { OutputKey: 'OwnerUrl', OutputValue: endpoint }, { OutputKey: 'OwnerFunctionArn', OutputValue: 'unit-test-function' }] }] };
+    if (operation === 'get-template') return { TemplateBody: template };
+    if (operation === 'get-function-url-config') return { FunctionUrl: endpoint, AuthType: 'AWS_IAM' };
+    throw new Error('Unexpected mutation or lookup: ' + operation);
+  };
+  const options = { checkSites: async () => {}, checkApi: async () => {}, request: async () => ({ status: 403 }) };
+  await verifyOwnerDeployment(aws, review, current, options);
+  assert.deepEqual(calls, ['describe-stacks', 'get-template', 'get-function-url-config']);
+  await assert.rejects(verifyOwnerDeployment(aws, review, { ...current, shared: { host: 'i-changed' } }, options), /differs/);
+  await assert.rejects(verifyOwnerDeployment(aws, review, current, { ...options, request: async () => ({ status: 200 }) }), /must be rejected/);
 });
 test('laptop helper signs with lambda SigV4 and temporary session credentials without printing keys', async () => {
   const code = crypto.randomBytes(32).toString('base64url'); let captured;

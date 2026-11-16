@@ -1,9 +1,15 @@
+# Deployment waiter correction
+
+- CloudFormation `DescribeChangeSet` does not return the `ChangeSetType` field previously used by both wrappers. A new stack therefore incorrectly selected the update-completion waiter and could appear stuck after successful creation. Both wrappers now select the waiter from pre-execution stack state: REVIEW_IN_PROGRESS uses create-complete; existing completed stacks use update-complete. Unsupported/in-progress states remain blocked.
+- Added read-only `deploy:owner -- --verify` recovery, including exact deployed-template comparison, original shared/RB1 dependency snapshots, all existing site/API health, Lambda URL AWS_IAM configuration, and rejection of unsigned requests. It never resubmits a change set or creates a pairing code.
+- All 32 API/CDK tests passed, including initial-create/update waiter regressions and owner verification checks. Following the owner's execution, AWS reported RB1OwnerStack CREATE_COMPLETE and the owner endpoint rejected unsigned POST with HTTP 403. The new full read-only owner verifier also passed exact-template/dependency comparisons and all four existing-site plus phone API checks. No deployment was submitted to diagnose the waiter issue.
+
 # IAM-authenticated owner pairing endpoint
 
 - Added a separate Lambda Function URL with AWS_IAM authentication and a profile-aware SigV4 laptop helper (`npm run pair`). No EC2/Caddy/Android changes are required for this feature.
 - New tests cover missing/wrong-account IAM context, allowed route/body, code length/verifier/expiry, no secret logging, issuance limits, failure handling, one-time compatibility with the existing phone enrollment API, temporary-session SigV4 signing and the two required caller permissions.
 - CDK tests reject public URLs, attachment to existing roles, broad DynamoDB writes, and EC2/SSM/table ownership. The owner execution role can write only PAIR#/PAIR-RATE# records and its own logs. The separate deployment guard preserves the original shared-host and RB1 snapshots and checks all four sites plus the phone API.
-- Full local suite: 30 tests passed. Separate owner synth and packaging checks passed. The owner endpoint has not been deployed or invoked in AWS; existing live applications are unchanged by this implementation.
+- Full local suite: 30 tests passed. Separate owner synth and packaging checks passed. At initial implementation the owner endpoint had not been deployed. Its subsequent owner-run deployment and read-only verification succeeded as recorded above; a signed code-issuance request has not been exercised by this validation. Existing live applications remain unchanged.
 
 # Empty execution response and post-deployment verification
 

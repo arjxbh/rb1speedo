@@ -41,6 +41,14 @@ Omit `--profile YOUR_PROFILE` throughout if your normal default profile or `AWS_
 
 The owner stack can create only its own Lambda, IAM execution role/policy, IAM-authenticated Function URL, retained seven-day log group, and CDK metadata. Its guard rejects EC2, SSM, DNS, table, and bucket resources, attachment to an existing role, and a public Function URL. There is no EC2 application release, Caddy reload, instance restart, or change to Piggy Ledger, Midlife Motors, Kaedama, Cranky Goose, or the existing RB1 CloudFormation template. Continue to use the original guarded `npm run deploy` path only for changes to the EC2-backed phone API.
 
+If a local execution command was interrupted or appears stuck after CloudFormation completes, verify the retained review without submitting the change set again:
+
+```sh
+npm run deploy:owner -- --profile YOUR_PROFILE --verify
+```
+
+This read-only path works after the one-hour execution window and compares the deployed template, original dependency snapshot, Function URL IAM configuration, unsigned-request rejection, and existing site/API health. Ctrl+C stops a local waiter; it does not cancel an AWS deployment already submitted. The scripts choose create/update waiters from stack state before execution and print which waiter is running.
+
 ## Owner permissions
 
 AWS now requires **both** `lambda:InvokeFunctionUrl` and `lambda:InvokeFunction` for new Function URLs. The signed request's caller must be in the same AWS account, pass normal IAM authorization for the specific function, and have access to describe `RB1OwnerStack` so the helper can discover the URL.

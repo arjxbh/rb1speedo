@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { isDeepStrictEqual } = require('node:util');
-const { parseAwsOutput, discover, health, assertChanges } = require('./deploy.cjs');
+const { parseAwsOutput, discover, health, assertChanges, executionWaiter } = require('./deploy.cjs');
 const ROOT = path.resolve(__dirname, '../..');
 const STACK = 'RB1OwnerStack', REGION = 'us-east-1', ACCOUNT = '294281109519';
 function assertOwnerTemplate(template, tableName) {
@@ -52,12 +52,27 @@ async function checkPhoneApi(url) {
   const r = await fetch(url + '/health', { signal: AbortSignal.timeout(15000) });
   if (!r.ok || (await r.json()).service !== 'rb1-dashcam') throw new Error('Existing phone API is unhealthy');
 }
+async function verifyOwnerDeployment(aws, review, current, { checkSites = health, checkApi = checkPhoneApi, request = fetch } = {}) {
+  if (!isDeepStrictEqual(current, review.snapshot)) throw new Error('Existing infrastructure differs from the owner review');
+  const stack = aws('cloudformation', 'describe-stacks', ['--stack-name', STACK]).Stacks[0];
+  if (!['CREATE_COMPLETE', 'UPDATE_COMPLETE'].includes(stack.StackStatus)) throw new Error('Owner stack is not complete: ' + stack.StackStatus);
+  const actual = aws('cloudformation', 'get-template', ['--stack-name', STACK, '--template-stage', 'Original']).TemplateBody;
+  if (!isDeepStrictEqual(typeof actual === 'string' ? JSON.parse(actual) : actual, review.template)) throw new Error('Deployed owner template differs from review');
+  await checkSites(); await checkApi(current.parent.outputs.ApiUrl);
+  const endpoint = stack.Outputs.find(o => o.OutputKey === 'OwnerUrl').OutputValue;
+  const configArn = stack.Outputs.find(o => o.OutputKey === 'OwnerFunctionArn').OutputValue;
+  const config = aws('lambda', 'get-function-url-config', ['--function-name', configArn]);
+  if (config.AuthType !== 'AWS_IAM' || config.FunctionUrl !== endpoint) throw new Error('Owner URL IAM configuration differs');
+  const unsigned = await request(endpoint, { method: 'POST', body: '{}', redirect: 'error', signal: AbortSignal.timeout(15000) });
+  await unsigned.body?.cancel(); if (unsigned.status !== 403) throw new Error('Unsigned owner requests must be rejected');
+}
 async function main(args) {
-  let profile; const execute = args.includes('--execute');
+  let profile; const execute = args.includes('--execute'), verify = args.includes('--verify');
+  if (execute && verify) throw new Error('Choose --execute or read-only --verify, not both');
   for (let i = 0; i < args.length; i++) {
-    if (args[i] === '--execute') continue;
+    if (args[i] === '--execute' || args[i] === '--verify') continue;
     if (args[i] === '--profile' && args[i + 1] && !args[i + 1].startsWith('-')) profile = args[++i];
-    else throw new Error('Usage: npm run deploy:owner -- [--profile NAME] [--execute]');
+    else throw new Error('Usage: npm run deploy:owner -- [--profile NAME] [--execute | --verify]');
   }
   const aws = (service, operation, rest = []) => parseAwsOutput(execFileSync('aws', [service, operation,
     '--region', REGION, '--no-cli-pager', '--output', 'json', ...(profile ? ['--profile', profile] : []), ...rest],
@@ -66,6 +81,14 @@ async function main(args) {
   console.log('Checking the existing RB1 stack, shared host, all four applications, and their policies.');
   const before = snapshot(aws); await health(); await checkPhoneApi(before.parent.outputs.ApiUrl);
   const reviewFile = path.join(ROOT, 'infra/owner-review.json');
+  if (verify) {
+    const review = JSON.parse(fs.readFileSync(reviewFile));
+    assertOwnerTemplate(review.template, before.parent.outputs.TableName);
+    await verifyOwnerDeployment(aws, review, before);
+    console.log('Read-only owner verification passed; existing infrastructure and all four applications are unchanged.');
+    console.log('Generate a code with: npm run pair' + (profile ? ' -- --profile ' + profile : ''));
+    return;
+  }
   if (!execute) {
     execFileSync('npm', ['run', 'build:owner'], { cwd: ROOT, stdio: 'inherit' });
     execFileSync('npm', ['test'], { cwd: ROOT, stdio: 'inherit' });
@@ -92,21 +115,15 @@ async function main(args) {
   assertChanges(cs, review.template);
   const actual = aws('cloudformation', 'get-template', ['--stack-name', STACK, '--change-set-name', review.changeSet, '--template-stage', 'Original']).TemplateBody;
   if (!isDeepStrictEqual(typeof actual === 'string' ? JSON.parse(actual) : actual, review.template) || !isDeepStrictEqual(cs.Changes, review.changes)) throw new Error('Reviewed owner change set differs');
+  const waiter = executionWaiter(aws('cloudformation', 'describe-stacks', ['--stack-name', STACK]).Stacks[0].StackStatus);
   aws('cloudformation', 'execute-change-set', ['--change-set-name', review.changeSet, '--client-request-token',
     'rb1-owner-' + crypto.createHash('sha256').update(review.changeSet).digest('hex')]);
-  execFileSync('aws', ['cloudformation', 'wait', cs.ChangeSetType === 'CREATE' ? 'stack-create-complete' : 'stack-update-complete',
+  console.log(`Owner change set submitted. Waiting using ${waiter}; AWS may take a few minutes.`);
+  execFileSync('aws', ['cloudformation', 'wait', waiter,
     '--stack-name', STACK, '--region', REGION, ...(profile ? ['--profile', profile] : [])], { stdio: 'inherit' });
-  if (!isDeepStrictEqual(snapshot(aws), before)) throw new Error('Existing infrastructure differs after owner deployment');
-  await health(); await checkPhoneApi(before.parent.outputs.ApiUrl);
-  const output = aws('cloudformation', 'describe-stacks', ['--stack-name', STACK]).Stacks[0].Outputs;
-  const endpoint = output.find(o => o.OutputKey === 'OwnerUrl').OutputValue;
-  const configArn = output.find(o => o.OutputKey === 'OwnerFunctionArn').OutputValue;
-  const config = aws('lambda', 'get-function-url-config', ['--function-name', configArn]);
-  if (config.AuthType !== 'AWS_IAM' || config.FunctionUrl !== endpoint) throw new Error('Owner URL IAM configuration differs');
-  const unsigned = await fetch(endpoint, { method: 'POST', body: '{}', redirect: 'error', signal: AbortSignal.timeout(15000) });
-  await unsigned.body?.cancel(); if (unsigned.status !== 403) throw new Error('Unsigned owner requests must be rejected');
+  await verifyOwnerDeployment(aws, review, snapshot(aws));
   console.log('Owner pairing endpoint deployed with IAM authentication; RB1 and all four shared-host applications preserved.');
   console.log('Generate a code from your laptop with: npm run pair' + (profile ? ' -- --profile ' + profile : ''));
 }
-module.exports = { assertOwnerTemplate, snapshot };
+module.exports = { assertOwnerTemplate, snapshot, verifyOwnerDeployment };
 if (require.main === module) main(process.argv.slice(2)).catch(e => { console.error(e.stderr?.toString().trim() || e.message); process.exitCode = 1; });

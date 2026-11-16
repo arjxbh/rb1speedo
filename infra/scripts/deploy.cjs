@@ -20,6 +20,13 @@ function parseAwsOutput(output, service, operation) {
   if (!text) throw new Error(`AWS CLI returned empty output for ${service} ${operation}`);
   return JSON.parse(text);
 }
+function executionWaiter(stackStatus) {
+  // DescribeChangeSet does not return ChangeSetType. Capture stack state BEFORE
+  // execution: a newly prepared stack is REVIEW_IN_PROGRESS, not an update.
+  if (stackStatus === 'REVIEW_IN_PROGRESS') return 'stack-create-complete';
+  if (['CREATE_COMPLETE', 'UPDATE_COMPLETE', 'UPDATE_ROLLBACK_COMPLETE'].includes(stackStatus)) return 'stack-update-complete';
+  throw new Error('Stack is not ready to execute a reviewed change set: ' + stackStatus);
+}
 function readStackPolicy(aws, name) {
   try {
     const result = aws('cloudformation', 'get-stack-policy', ['--stack-name', name]);
@@ -202,13 +209,14 @@ async function main(args) {
     '--template-stage', 'Original']).TemplateBody;
   const parsed = typeof actual === 'string' ? JSON.parse(actual) : actual;
   if (!isDeepStrictEqual(parsed, reviewed.template) || !isDeepStrictEqual(cs.Changes, reviewed.changes)) throw new Error('Reviewed change set differs');
+  const waiter = executionWaiter(aws('cloudformation', 'describe-stacks', ['--stack-name', STACK]).Stacks[0].StackStatus);
   aws('cloudformation', 'execute-change-set', ['--change-set-name', reviewed.changeSet,
     '--client-request-token', 'rb1-' + digest(reviewed.changeSet)]);
-  const waiter = cs.ChangeSetType === 'CREATE' ? 'stack-create-complete' : 'stack-update-complete';
+  console.log(`Change set submitted. Waiting for ${STACK} using ${waiter}; AWS may take a few minutes.`);
   execFileSync('aws', ['cloudformation', 'wait', waiter, '--stack-name', STACK, '--region', REGION,
     ...(profile ? ['--profile', profile] : [])], { stdio: 'inherit' });
   const after = discover(aws);
   await verifyCompletedDeployment(aws, reviewed, domain, after);
 }
-module.exports = { assertTemplate, assertChanges, discover, health, parseAwsOutput, readStackPolicy, verifyCompletedDeployment };
+module.exports = { assertTemplate, assertChanges, discover, health, parseAwsOutput, readStackPolicy, verifyCompletedDeployment, executionWaiter };
 if (require.main === module) main(process.argv.slice(2)).catch(e => { console.error(e.message); process.exitCode = 1; });

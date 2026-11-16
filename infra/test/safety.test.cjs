@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const cdk = require('aws-cdk-lib');
 const { Template } = require('aws-cdk-lib/assertions');
 const { DashcamStack } = require('../stack.cjs');
-const { assertTemplate, assertChanges, discover, parseAwsOutput, readStackPolicy, verifyCompletedDeployment } = require('../scripts/deploy.cjs');
+const { assertTemplate, assertChanges, discover, parseAwsOutput, readStackPolicy, verifyCompletedDeployment, executionWaiter } = require('../scripts/deploy.cjs');
 const host = 'i-00000000000000000', role = 'ValidationOnlyRole';
 const app = new cdk.App();
 const template = Template.fromStack(new DashcamStack(app, 'RB1DashcamStack', { env: { account: '123456789012', region: 'us-east-1' },
@@ -107,6 +107,13 @@ test('discovery preserves absent optional policies while keeping PiggyLedger pro
   assert.ok(snapshot.stacks.PiggyLedgerStack.policy);
   assert.throws(() => discover(fakeDiscovery({ piggyPolicy: false })), /Shared host stack protection missing or changed/);
   assert.throws(() => discover(fakeDiscovery({ policyError: 'AccessDenied' })), /MidlifeMotorClubStack: AccessDenied/);
+});
+test('waiters use pre-execution stack state, including updates to originally-created stacks', () => {
+  assert.equal(executionWaiter('REVIEW_IN_PROGRESS'), 'stack-create-complete');
+  for (const status of ['CREATE_COMPLETE', 'UPDATE_COMPLETE', 'UPDATE_ROLLBACK_COMPLETE'])
+    assert.equal(executionWaiter(status), 'stack-update-complete');
+  for (const status of ['CREATE_IN_PROGRESS', 'UPDATE_IN_PROGRESS', 'ROLLBACK_COMPLETE', 'DELETE_IN_PROGRESS', undefined])
+    assert.throws(() => executionWaiter(status), /not ready/);
 });
 test('completed-deployment recovery is read-only and checks template, original host and SSM target', async () => {
   const snapshot = discover(fakeDiscovery());
