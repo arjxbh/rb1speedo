@@ -2,6 +2,10 @@ import club.midlife.rb1speed.DashcamPolicy;
 public class DashcamPolicyTest {
     private static void check(boolean value, String reason) { if (!value) throw new AssertionError(reason); }
     public static void main(String[] args) {
+        check(!DashcamPolicy.recordingFresh(0, 1000), "Starting a service does not mean video is recording");
+        check(DashcamPolicy.recordingFresh(1000, 3999), "Recent written frames show recording");
+        check(!DashcamPolicy.recordingFresh(1000, 4000), "Stalled video stops showing REC after three seconds");
+        check(!DashcamPolicy.recordingFresh(1000, 999), "Invalid frame clocks cannot show recording");
         check(!DashcamPolicy.cut(DashcamPolicy.CLIP_US, false, DashcamPolicy.CLIP_US), "Never cut between dependent frames");
         check(!DashcamPolicy.cut(DashcamPolicy.CLIP_US - 1, true, DashcamPolicy.CLIP_US), "Wait for full segment");
         check(DashcamPolicy.cut(DashcamPolicy.CLIP_US, true, DashcamPolicy.CLIP_US), "Cut at next sync frame");

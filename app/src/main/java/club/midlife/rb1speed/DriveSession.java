@@ -2,7 +2,7 @@ package club.midlife.rb1speed;
 
 /** Foreground-session UI timing, independent of Android. */
 public final class DriveSession {
-    public static final long HIDE_DEMO_AFTER_MS = 10000;
+    public static final long HIDE_CONTROLS_AFTER_MS = 10000;
     public static final double MOVING_MPH = 1.0;
     private long movingSince = -1;
     private long previous = -1;
@@ -14,9 +14,10 @@ public final class DriveSession {
         if (hidden) return;
         if (!freshLive || !Double.isFinite(mph) || mph <= MOVING_MPH) { movingSince = -1; return; }
         if (movingSince < 0) movingSince = nowMs;
-        if (nowMs - movingSince >= HIDE_DEMO_AFTER_MS) hidden = true;
+        if (nowMs - movingSince >= HIDE_CONTROLS_AFTER_MS) hidden = true;
     }
 
-    public boolean demoVisible() { return !hidden; }
+    public boolean controlsVisible() { return !hidden; }
+    public boolean demoVisible() { return controlsVisible(); }
     public void reset() { movingSince = -1; previous = -1; hidden = false; }
 }

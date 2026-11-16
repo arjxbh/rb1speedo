@@ -1,3 +1,10 @@
+Settings and camera aiming (1.6.1).
+
+- Group Skins, Camera & clips, Debug and Updates under Settings, with a direct Aim camera preview entry. Settings and Demo hide after ten continuous seconds of reliable live GPS movement above 1 mph; simulation does not count. Returning to the dashboard restores them.
+- Show a persistent red REC indicator only while video frames are being written, with a three-second freshness limit. Stopped/starting states remain distinct.
+- Add a rear-camera aiming preview with center/thirds guides. Preview works without saving video, shares an active recording session, and releases its frame capture when closed.
+- Correct camera setup insets on Android 15. No new Android permissions or AWS deployment are required.
+
 Dashcam and private Wi-Fi cloud copies (1.6.0, pending deployment/device acceptance).
 
 - Optional silent rear-camera recording alongside the speedometer: 1080p/30 fps, 15-minute MP4s with shorter last-trip clips, one-minute recoverable recording fragments, a foreground notification and ten-second power-disconnect debounce.

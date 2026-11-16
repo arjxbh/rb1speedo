@@ -20,6 +20,27 @@ public final class DashcamActivity extends Activity {
     private TextView status;
     private EditText endpoint, code;
     private Button pair;
+    private CameraPreviewView preview;
+    private TextView previewStatus;
+    private Button previewButton;
+    private boolean previewRequested, previewBound, previewHasFrame;
+    private long previewFrameAt;
+    private DashcamService.PreviewBinder previewService;
+    private final CameraPreviewFrames.Listener previewListener = new CameraPreviewFrames.Listener() {
+        public void frame(android.graphics.Bitmap bitmap) {
+            if (!visible || !previewRequested) return;
+            preview.setImageBitmap(bitmap); previewHasFrame = true; previewFrameAt = SystemClock.elapsedRealtime(); refreshPreviewStatus();
+        }
+    };
+    private final ServiceConnection previewConnection = new ServiceConnection() {
+        public void onServiceConnected(ComponentName name, IBinder binder) {
+            previewService = (DashcamService.PreviewBinder)binder;
+            if (visible && previewRequested) previewService.listen(previewListener);
+        }
+        public void onServiceDisconnected(ComponentName name) {
+            previewService = null; previewHasFrame = false; refreshPreviewStatus();
+        }
+    };
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ExecutorService io = Executors.newSingleThreadExecutor();
     private boolean visible;
@@ -41,7 +62,23 @@ public final class DashcamActivity extends Activity {
         super.onCreate(state);
         ScrollView scroll = new ScrollView(this); LinearLayout content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL); content.setPadding(24, 16, 24, 24); scroll.addView(content);
+        final LinearLayout insetContent = content;
+        scroll.setOnApplyWindowInsetsListener(new View.OnApplyWindowInsetsListener() {
+            public WindowInsets onApplyWindowInsets(View view, WindowInsets insets) {
+                int margin = Math.round(12 * getResources().getDisplayMetrics().density);
+                insetContent.setPadding(margin + insets.getSystemWindowInsetLeft(), margin + insets.getSystemWindowInsetTop(),
+                    margin + insets.getSystemWindowInsetRight(), margin + insets.getSystemWindowInsetBottom());
+                return insets;
+            }
+        });
         TextView title = new TextView(this); title.setText("Dashcam · setup while parked"); title.setTextSize(23); content.addView(title);
+        previewRequested = state == null ? getIntent().getBooleanExtra("preview", false) : state.getBoolean("preview", false);
+        previewButton = button("Show aiming preview", content, new View.OnClickListener() { public void onClick(View view) {
+            previewRequested = !previewRequested; updatePreview();
+        }});
+        preview = new CameraPreviewView(this);
+        content.addView(preview, new LinearLayout.LayoutParams(-1, Math.round(220 * getResources().getDisplayMetrics().density)));
+        previewStatus = new TextView(this); previewStatus.setTextSize(14); content.addView(previewStatus);
         status = new TextView(this); status.setTextSize(15); status.setTextIsSelectable(true); content.addView(status);
         button("Enable recording on external power", content, new View.OnClickListener() { public void onClick(View view) {
             new AlertDialog.Builder(DashcamActivity.this).setTitle("Enable dashcam loop?")
@@ -88,7 +125,7 @@ public final class DashcamActivity extends Activity {
                 }}).setNegativeButton("Cancel", null).show();
         }});
         button("Back to speedometer", content, new View.OnClickListener() { public void onClick(View view) { finish(); }});
-        setContentView(scroll);
+        setContentView(scroll); scroll.requestApplyInsets();
     }
     private void notificationsAndStart() {
         if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
@@ -98,19 +135,56 @@ public final class DashcamActivity extends Activity {
     @Override public void onRequestPermissionsResult(int request, String[] permissions, int[] results) {
         super.onRequestPermissionsResult(request, permissions, results);
         if (request == 81 && results.length > 0 && results[0] == PackageManager.PERMISSION_GRANTED) notificationsAndStart();
+        if (request == 83) {
+            if (results.length == 0 || results[0] != PackageManager.PERMISSION_GRANTED) previewRequested = false;
+            updatePreview();
+        }
     }
     @Override public void onResume() {
         super.onResume(); visible = true; main.post(refresh);
         if (Build.VERSION.SDK_INT >= 33) registerReceiver(powerReceiver, new IntentFilter(Intent.ACTION_BATTERY_CHANGED), Context.RECEIVER_NOT_EXPORTED);
         else registerReceiver(powerReceiver, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
         DashcamService.maybeStart(this);
+        updatePreview();
     }
     @Override public void onPause() {
-        visible = false; main.removeCallbacks(refresh); unregisterReceiver(powerReceiver);
+        visible = false; main.removeCallbacks(refresh); unregisterReceiver(powerReceiver); detachPreview();
         getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON); super.onPause();
     }
     @Override public void onDestroy() { io.shutdown(); super.onDestroy(); }
+    @Override public void onSaveInstanceState(Bundle state) { state.putBoolean("preview", previewRequested); super.onSaveInstanceState(state); }
+    private void updatePreview() {
+        preview.setVisibility(previewRequested ? View.VISIBLE : View.GONE);
+        previewStatus.setVisibility(previewRequested ? View.VISIBLE : View.GONE);
+        previewButton.setText(previewRequested ? "Hide aiming preview" : "Show aiming preview");
+        if (!visible || !previewRequested) { detachPreview(); return; }
+        if (checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[]{Manifest.permission.CAMERA}, 83); return;
+        }
+        if (!previewBound) {
+            previewHasFrame = false;
+            previewBound = bindService(new Intent(this, DashcamService.class), previewConnection, Context.BIND_AUTO_CREATE);
+        }
+        refreshPreviewStatus();
+    }
+    private void detachPreview() {
+        if (previewService != null) previewService.listen(null);
+        previewService = null;
+        if (previewBound) { unbindService(previewConnection); previewBound = false; }
+        previewHasFrame = false;
+        if (preview != null) preview.setImageDrawable(null);
+    }
+    private void refreshPreviewStatus() {
+        if (previewStatus == null || !previewRequested) return;
+        if (previewHasFrame && SystemClock.elapsedRealtime() - previewFrameAt >= 3000) {
+            previewHasFrame = false; preview.setImageDrawable(null);
+        }
+        previewStatus.setText(previewHasFrame ?
+            (DashcamService.recording() ? "● Recording · live aiming preview" : "Live preview · preview alone does not save video") + "\nAlign the horizon with the guides. Rear camera · no microphone." :
+            "Waiting for camera frames · " + getSharedPreferences("dashcam", 0).getString("previewStatus", "Opening rear camera"));
+    }
     private void showStatus() {
+        refreshPreviewStatus();
         SharedPreferences p = getSharedPreferences("dashcam", 0); ClipStore store = ClipStore.get(this);
         long pending = 0, saved = 0; int count = 0, protectionPending = 0; long oldest = Long.MAX_VALUE;
         for (JSONObject c : store.clips()) {
@@ -126,7 +200,7 @@ public final class DashcamActivity extends Activity {
         Intent battery = registerReceiver(null, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
         int percent = battery == null ? 0 : battery.getIntExtra(BatteryManager.EXTRA_LEVEL, 0) * 100 / Math.max(1, battery.getIntExtra(BatteryManager.EXTRA_SCALE, 100));
         float temperature = battery == null ? 0 : battery.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, 0) / 10f;
-        status.setText("Recording: " + (DashcamService.running() ? "service active" : "stopped") +
+        status.setText("Recording: " + (DashcamService.recording() ? "● REC · writing video" : DashcamService.running() ? "waiting for video frames" : "stopped") +
             "\n" + p.getString("cameraStatus", "Not started") + "\nAuto-record: " + (p.getBoolean("enabled", false) ? "enabled" : "disabled") +
             "\nRecording elapsed: " + (DashcamService.running() && p.getLong("recordingStarted", 0) > 0 ? (System.currentTimeMillis() - p.getLong("recordingStarted", 0)) / 1000 + " sec" : "—") +
             "\nRear camera · 1080p / 30 fps · 8 Mbps · no microphone" +

@@ -1,3 +1,12 @@
+# Version 1.6.1 — settings, recording status and aiming preview
+
+- Native Android build, five model suites (speed, driving features, brightness, dashcam policy and preview pixels), APK alignment and existing-key v2/v3 signatures passed. Version 1.6.1 / code 13; no new permissions.
+- Movement checks cover continuous real movement, stops, unreliable/stale GPS, gaps and simulated speed. Settings uses the same tested session gate as Demo. Recording freshness checks distinguish startup, recent written video, a three-second stall and invalid timestamps. Pixel checks cover row padding, plane buffer offsets, planar/interleaved chroma and preserved input positions.
+- Android 15 emulator: verified the dashboard has Settings in place of the four utility controls, all five Settings entries are present, preview receives rear-camera frames with aiming guides, preview hide/close and dashboard return, portrait/landscape layout, and preview-only service release/rebind across background/resume. Live GPS at 20 knots retained Settings before ten seconds, then hid Settings and Demo while the camera status stayed visible; resuming restored Settings. A 12-second Demo capture retained Settings and Exit demo. Preview screenshots were inspected for framing, guides and system-bar clearance.
+- Emulator recording-startup failure (less than the existing 5 GiB reserve) stayed stopped without a false REC, returned to a working aiming preview, and allowed stop/disable, preview close and dashboard return without an app crash.
+- A physical OnePlus check remains necessary: enable recording while powered, confirm red REC appears only once video is written, open/close aiming preview during recording, play the resulting clip to confirm continuous video and framing/orientation, unplug for ten seconds and check REC clears, reconnect, test both landscape directions, and check heat during a longer drive. The emulator does not validate this phone's hardware 1080p encoder or concurrent recording/preview stream support.
+- No server or AWS changes were made.
+
 # Deployment waiter correction
 
 - Owner-issued enrollment records now include the existing API's optimistic-lock version (1). The integration test consumes the actual Lambda record without injecting that field; omission would prevent phone enrollment despite successful code issuance.

@@ -31,8 +31,9 @@ public class MainActivity extends Activity implements LocationListener {
     private LocationManager manager;
     private DashboardDial dial;
     private LinearLayout dashboard;
-    private TextView speedText, sourceText, footerText, carText;
-    private Button skinButton, demoButton, gpsButton;
+    private TextView speedText, sourceText, footerText, carText, recordingText;
+    private Button settingsButton, demoButton, gpsButton;
+    private AlertDialog settingsDialog;
     private DashboardSkin skin;
     private final SpeedReading reading = new SpeedReading();
     private final DriveSession driveSession = new DriveSession();
@@ -210,6 +211,7 @@ public class MainActivity extends Activity implements LocationListener {
     }
     @Override public void onPause() {
         active = false; handler.removeCallbacks(ticker); audio.pause();
+        if (settingsDialog != null) settingsDialog.dismiss();
         if (debugDialog != null) debugDialog.dismiss();
         handler.removeCallbacks(endBrightnessPreview);
         debugBrightness = -1f;
@@ -258,6 +260,22 @@ public class MainActivity extends Activity implements LocationListener {
                 dialog.dismiss();
                 }
             }).setNegativeButton("Cancel", null).show();
+    }
+    private void openSettings() {
+        if (!driveSession.controlsVisible() || settingsDialog != null) return;
+        settingsDialog = new AlertDialog.Builder(this).setTitle("Settings")
+            .setItems(new String[]{"Skins", "Camera & clips", "Aim camera · live preview", "Debug", "Updates"},
+                new DialogInterface.OnClickListener() { public void onClick(DialogInterface dialog, int which) {
+                    if (which == 0) openSkins();
+                    else if (which == 1 || which == 2) startActivity(new Intent(MainActivity.this, DashcamActivity.class).putExtra("preview", which == 2));
+                    else if (which == 3) openDebug();
+                    else openUpdates();
+                }})
+            .setNegativeButton("Close", null).create();
+        settingsDialog.setOnDismissListener(new DialogInterface.OnDismissListener() {
+            public void onDismiss(DialogInterface dialog) { settingsDialog = null; }
+        });
+        settingsDialog.show();
     }
     private void openUpdates() {
         try {
@@ -325,8 +343,8 @@ public class MainActivity extends Activity implements LocationListener {
         carText = label(18,0xffdce7f0); carText.setGravity(Gravity.CENTER_VERTICAL | Gravity.START);
         carText.setTypeface(Typeface.create("sans-serif-condensed",Typeface.BOLD));
         header.addView(carText,new LinearLayout.LayoutParams(0,dp(56),1));
-        skinButton = button("Skins ▾",new View.OnClickListener() { public void onClick(View view) { openSkins(); }});
-        header.addView(skinButton,new LinearLayout.LayoutParams(dp(100),dp(48)));
+        settingsButton = button("Settings",new View.OnClickListener() { public void onClick(View view) { openSettings(); }});
+        header.addView(settingsButton,new LinearLayout.LayoutParams(dp(100),dp(48)));
         return header;
     }
     private void toggleDemo() {
@@ -374,15 +392,10 @@ public class MainActivity extends Activity implements LocationListener {
         LinearLayout.LayoutParams gpsParams=new LinearLayout.LayoutParams(-1,dp(52)); gpsParams.setMargins(0,dp(4),0,dp(4));
         panel.addView(gpsButton,gpsParams);
         LinearLayout controls=row();
-        controls.addView(button("Updates",new View.OnClickListener() { public void onClick(View view) { openUpdates(); }}),weightedButton());
+        recordingText = label(13, 0xffa9bacb);
+        controls.addView(recordingText, new LinearLayout.LayoutParams(0, dp(48), 1));
         demoButton=button("Demo",new View.OnClickListener() { public void onClick(View view) { toggleDemo(); }});
         controls.addView(demoButton,weightedButton());
-        controls.addView(button("Camera", new View.OnClickListener() {
-            public void onClick(View view) { startActivity(new Intent(MainActivity.this, DashcamActivity.class)); }
-        }), weightedButton());
-        controls.addView(button("Debug", new View.OnClickListener() {
-            public void onClick(View view) { openDebug(); }
-        }), weightedButton());
         panel.addView(controls,new LinearLayout.LayoutParams(-1,dp(56)));
         footerText=label(11,0xff8a9dad); footerText.setMaxLines(2);
         panel.addView(footerText,new LinearLayout.LayoutParams(-1,dp(28)));
@@ -394,7 +407,13 @@ public class MainActivity extends Activity implements LocationListener {
         double speed=speedAt(now);
         dashboard.setBackgroundColor(skin.background);
         setText(carText,skin.title + "  /  " + skin.code);
-        skinButton.setContentDescription("Choose dashboard skin. Current: " + skin.label);
+        settingsButton.setContentDescription("Settings: skins, camera, aiming preview, debug and updates");
+        settingsButton.setVisibility(driveSession.controlsVisible() ? View.VISIBLE : View.INVISIBLE);
+        if (!driveSession.controlsVisible() && settingsDialog != null) settingsDialog.dismiss();
+        boolean recording = DashcamService.recording();
+        setText(recordingText, recording ? "● REC" : DashcamService.running() ? "○ Starting camera" : "○ Camera off");
+        recordingText.setTextColor(recording ? 0xffff6868 : 0xffa9bacb);
+        recordingText.setContentDescription(recording ? "Dashcam recording" : DashcamService.running() ? "Dashcam starting or waiting for video" : "Dashcam not recording");
         int ink=skin == DashboardSkin.INTEGRA ? 0xfff0eee4 : skin.ink;
         speedText.setTextColor(ink);
         setText(speedText,valid?String.format(Locale.US,"%.0f",speed):"—");

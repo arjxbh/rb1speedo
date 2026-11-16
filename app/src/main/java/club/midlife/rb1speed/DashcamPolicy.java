@@ -9,6 +9,9 @@ public final class DashcamPolicy {
     public static final long PART_BYTES = 32L * 1024 * 1024;
     public static final long BATTERY_BUDGET_MS = 30 * 60 * 1000L;
     private DashcamPolicy() {}
+    public static boolean recordingFresh(long lastFrame, long now) {
+        return lastFrame > 0 && now >= lastFrame && now - lastFrame < 3000;
+    }
     public static boolean uploadAllowed(boolean wifi, boolean charging, int battery, long now, long deadline) {
         return wifi && (charging || (battery > 30 && now < deadline));
     }

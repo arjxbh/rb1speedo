@@ -4,7 +4,7 @@ A native Android GPS speedometer with five JDM-inspired skins. A recessed analog
 
 ## Dashboard skins
 
-Tap **Skins ▾** in the header to choose a car-inspired dashboard. The app remembers your selection across restarts; canceling keeps the current skin.
+Tap **Settings → Skins** in the header to choose a car-inspired dashboard. The app remembers your selection across restarts; canceling keeps the current skin.
 
 - **Honda Odyssey Absolute RB1** — luminous blue scale, cyan markings, white minor ticks, and a large black center cover hiding the needle spindle and tail.
 - **Nissan Skyline GT-R R32** — dark analog face, condensed ivory markings, orange needle.
@@ -21,15 +21,15 @@ These are inspired speedometer interpretations. All skins show the same live GPS
 3. Open **RB1 Speed**, tap the GPS status button, and select **Precise** location and **While using the app**.
 4. Turn on the phone's Location setting. Use outdoors with a clear view of the sky and allow time for the first satellite fix.
 
-Tap **Demo** beside Updates to preview the moving dial. The orange “Simulated speed” label identifies the preview; tap **Exit demo** or **Return to live GPS** to return to live GPS. Reopening the app always returns to live mode.
+Tap **Demo** beside the camera status to preview the moving dial. The orange “Simulated speed” label identifies the preview; tap **Exit demo** or **Return to live GPS** to return to live GPS. Reopening the app always returns to live mode.
 
-The DEMO entry button hides after 10 continuous seconds of fresh live GPS speed above 1 mph. Stationary or unavailable speed resets that timer; simulated speed does not count. Once hidden, the button and its touch target stay hidden for the rest of that foreground session. Returning to the app restores it. EXIT DEMO remains available while a preview is active.
+The **Settings** and **Demo** entry buttons hide after 10 continuous seconds of fresh live GPS speed above 1 mph. Stationary or unavailable speed resets that timer; simulated speed does not count. Once hidden, the buttons and their touch targets stay hidden for the rest of that foreground session. Returning to the dashboard restores them. EXIT DEMO remains available while a preview is active.
 
 On first opening, the footer shows **安全運転で、いってらっしゃい** (“Drive safely—have a good trip”) for six seconds. The spoken greeting waits five seconds after opening to give Bluetooth/Android Auto audio time to settle, and plays if the phone's default text-to-speech engine has an installed offline Japanese voice. Backgrounding the app cancels any pending speech. With no such voice, the text still appears; the app does not download voice data or use a network voice. The greeting plays once per screen-on session: cycling power, rotating, or returning from settings/browser does not replay it. After the screen turns off, the next resume or power connection while the app is visible can greet again. A fresh app launch can also greet.
 
 A locally synthesized bell chimes at **75 mph**, repeating every 1.5 seconds. In live mode it uses accepted GPS speed; in demo mode it follows the simulated speed so you can preview the sound while stationary. It stops below **73 mph** (a small margin avoids toggling around the threshold), when live GPS speed expires, when exiting demo without a fresh fix, or when the app pauses. On a fresh app launch, phone media volume is set to the nearest available step to 70%; this also affects other media apps and is not restored on exit. Rotation and routine returns to the app do not reset it. Fixed-volume devices or device policy may prevent the adjustment. Both sounds use media volume and do not play in the background. The speed chime mixes with existing music without requesting audio focus, so it does not ask Android or Android Auto to lower the music volume. The spoken greeting still requests temporary audio focus and can briefly lower music volume. Sound quality, Bluetooth routing, and Japanese speech depend on the phone and require physical testing.
 
-Tap **Updates** in the control row to open the latest release in your browser. Download `RB1-Speed.apk`, open it, and approve the Android update prompt. The app does not check versions or download updates itself; it needs no Internet or installer permission. Returning from the browser resets to live GPS as usual. Install this version manually once to get the button. Keep the existing app installed when updating; Android verifies signing continuity.
+Tap **Settings → Updates** to open the latest release in your browser. Download `RB1-Speed.apk`, open it, and approve the Android update prompt. The app does not check versions or download updates itself; it does not request installer permission. Returning from the browser resets to live GPS as usual. Install this version manually once to get the button. Keep the existing app installed when updating; Android verifies signing continuity.
 
 ## Windshield-mounted use
 
@@ -37,13 +37,17 @@ Leave RB1 Speed open in landscape. Any external power source (including a USB ca
 
 The ambient light sensor controls brightness inside the dashboard: approximately 6% in darkness, rising smoothly to 100% at 10,000 lux. Keep the sensor unobstructed by the mount. Without a sensor reading, the app dims to 8% between approximate sunset and sunrise using the latest GPS position; before a position is available it uses 7 pm–7 am local time. Daytime fallback uses Android’s brightness setting. App brightness is released on leaving the dashboard; no system brightness permission is needed.
 
-Tap **Debug** beside Demo for live checks while parked. The panel refreshes twice per second and shows external power, the keep-screen-on flag, system timeout, actual media volume and its 70% target step, greeting state, sensor lux, brightness source, and requested app brightness. **Apply 70% media volume** reapplies the launch setting; this changes phone media volume and remains after closing. **Test dim** and **Test bright** override brightness for five seconds, then restore automatic control. Closing the panel or leaving the app also clears the preview. Cover/uncover the sensor or unplug/reconnect the charger to watch real inputs change. Requested brightness is not a measurement of physical panel output. Touching the screen restarts Android’s idle timeout.
+Tap **Settings → Debug** for live checks while parked. The panel refreshes twice per second and shows external power, the keep-screen-on flag, system timeout, actual media volume and its 70% target step, greeting state, sensor lux, brightness source, and requested app brightness. **Apply 70% media volume** reapplies the launch setting; this changes phone media volume and remains after closing. **Test dim** and **Test bright** override brightness for five seconds, then restore automatic control. Closing the panel or leaving the app also clears the preview. Cover/uncover the sensor or unplug/reconnect the charger to watch real inputs change. Requested brightness is not a measurement of physical panel output. Touching the screen restarts Android’s idle timeout.
 
-## Dashcam (1.6.0)
+## Dashcam
 
 For owner pairing without a server shell, the optional [IAM/SigV4 owner endpoint](docs/OWNER_PAIRING.md) lets you run `npm run pair` on your laptop using your existing AWS profile. Its separate CDK stack does not change the shared EC2 host or require a phone update.
 
-Tap **Camera** to enable silent rear-camera recording while externally powered. The app creates approximately 15-minute, 1080p/30 fps MP4 clips at 8 Mbps, plus a shorter last clip after ten seconds unplugged. Boundaries use keyframes, so clips can run slightly over 15 minutes. Recording survives leaving the dashboard and has a foreground notification with Stop. Normal screen timeout still applies on battery.
+Tap **Settings → Camera & clips** to enable silent rear-camera recording while externally powered. The app creates approximately 15-minute, 1080p/30 fps MP4 clips at 8 Mbps, plus a shorter last clip after ten seconds unplugged. Boundaries use keyframes, so clips can run slightly over 15 minutes. Recording survives leaving the dashboard and has a foreground notification with Stop. Normal screen timeout still applies on battery.
+
+The dashboard shows a red **● REC** only after frames have been written to video, and clears it if no frame is written for three seconds. Starting the service alone does not show REC. A gray status identifies a stopped or starting camera. The indicator stays visible after Settings hides.
+
+Open **Settings → Aim camera · live preview** (or **Show aiming preview** in Camera & clips) to aim the mounted phone while parked. The rear-camera preview includes thirds and center guides, updates at up to four frames per second, and works without enabling recording. Preview alone saves no video. While recording, it shares the camera and encoder session; closing the preview removes its capture target without stopping the recording. Leaving camera setup releases preview frames, and preview-only camera access ends when the screen is no longer visible.
 
 The default local loop is 32 GiB, configurable to 8/16/32/64 GiB, with a 5 GiB free-space reserve. It deletes uploaded ordinary clips first, then oldest unprotected unsynced clips when necessary. **Save incident** protects the latest two clips and the next clip; protection can fill the loop and pause recording. **View local clips** supports playback, sharing, deleting local files, and allowing local overwrite. Protected S3 copies remain protected if local protection is removed. Uninstalling or clearing app data removes private local footage and pairing credentials.
 

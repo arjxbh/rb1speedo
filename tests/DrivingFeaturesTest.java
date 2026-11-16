@@ -12,6 +12,7 @@ public class DrivingFeaturesTest {
         check(session.demoVisible(), "Do not hide before ten seconds");
         session.update(20, true, 31000);
         check(!session.demoVisible(), "Hide at ten seconds");
+        check(!session.controlsVisible(), "Settings hide after the same ten seconds of real movement");
         session.update(0, false, 32000);
         check(!session.demoVisible(), "Keep hidden for foreground session");
         session.reset();
@@ -28,6 +29,7 @@ public class DrivingFeaturesTest {
         check(session.demoVisible(), "A timer gap cannot count as continuous movement");
         for (long t = 10500; t < 30000; t += 500) session.update(80, false, t);
         check(session.demoVisible(), "Demo speed cannot hide its exit control");
+        check(session.controlsVisible(), "Simulated movement never hides settings");
 
         SpeedWarning warning = new SpeedWarning();
         check(!warning.update(74.99, true, 0), "Use unrounded 75 mph threshold");

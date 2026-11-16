@@ -183,3 +183,15 @@ The implementation uses S3 Standard, the disclosed opt-in local loop policy, 30-
 - [S3 storage classes](https://docs.aws.amazon.com/AmazonS3/latest/userguide/storage-class-intro.html)
 - [S3 security practices](https://docs.aws.amazon.com/AmazonS3/latest/userguide/security-best-practices.html), [monitoring](https://docs.aws.amazon.com/AmazonS3/latest/userguide/monitoring-overview.html)
 - Local infrastructure context: `/home/arjxbh/Projects/piggyledger/AGENTS.md`, `infra/README.md`, and `infra/lib/piggyledger-stack.ts`.
+
+## Dashboard settings and aiming preview (1.6.1)
+
+Skins, camera setup/clips, debug and updates are reached through Settings. Settings and Demo use the same foreground-session movement gate: ten continuous seconds above 1 mph using fresh accepted live GPS readings. Stops, stale/unreliable readings and timer gaps reset the interval; simulated speed never advances it. After hiding, they remain hidden until the dashboard resumes. The recording status remains visible.
+
+The red REC status requires a successfully written encoded video sample within the last three seconds, and a service currently intending to record. Startup, failure, teardown and stale output cannot be mistaken for active video. This is a local recording indication, independent of pairing or upload status.
+
+Camera setup binds to the same private camera service for a low-resolution YUV aiming stream, decoded at up to four frames per second only while a visible preview subscribes. The stream uses the same rear camera, automatic exposure and continuous-video autofocus as recording, with sensor/display rotation, a 16:9 center crop for fallback sizes, and center/thirds guides. Camera2 plane conversion handles row padding and interleaved chroma buffers. A bounded main-thread delivery drops old frames instead of queuing them.
+
+The service owns at most one camera. An idle, visible preview uses a bound service without enabling recording, creating clips or acquiring a recording wake lock. Starting recording promotes that camera after its preview-only session closes. If recording already exists, preview attaches to its configured YUV output by changing repeating-request targets; the encoder, muxer and clip remain open. Detaching removes that target, and no preview decoding runs while it is hidden. If a camera rejects the extra stream during initial configuration, recording falls back to its original encoder-only session. Recording errors can fall back to preview-only access while setup remains visible; preview failure does not retry indefinitely.
+
+This change has no server, infrastructure or authentication changes. Physical-device checks remain necessary for concurrent 1080p recording plus preview, saved-video framing/orientation, thermal load and sustained recording. Camera2 stream combinations follow the [Android multiple-stream documentation](https://developer.android.com/media/camera/camera2/multiple-camera-streams-simultaneously).

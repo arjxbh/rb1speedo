@@ -10,15 +10,18 @@ import android.util.Range;
 import android.util.Size;
 import android.view.*;
 import java.nio.ByteBuffer;
-import java.util.Collections;
+import java.util.ArrayList;
 import java.io.File;
 
 /** One continuous hardware encoder, with MP4 fragments cut only at sync frames. */
 final class CameraRecorder {
-    interface Listener { void stopped(String reason); }
+    interface Listener { void stopped(String reason); void written(); }
     private final Context context;
     private final ClipStore store;
     private final Listener listener;
+    private final boolean recording;
+    private CameraPreviewFrames preview;
+    private volatile CameraPreviewFrames.Listener previewListener;
     private final HandlerThread thread = new HandlerThread("dashcam-camera");
     private Handler handler;
     private CameraDevice camera;
@@ -33,7 +36,17 @@ final class CameraRecorder {
     private boolean closing, finished, started, opening;
     private Range<Integer> frameRange;
     private boolean continuousFocus;
-    CameraRecorder(Context context, Listener listener) { this.context = context; this.listener = listener; store = ClipStore.get(context); }
+    CameraRecorder(Context context, boolean recording, Listener listener) {
+        this.context = context; this.recording = recording; this.listener = listener; store = ClipStore.get(context);
+    }
+    void preview(CameraPreviewFrames.Listener listener) {
+        previewListener = listener;
+        if (handler != null) handler.post(new Runnable() { public void run() {
+            if (preview != null) preview.listen(previewListener);
+            if (!finished && !closing && session != null) try { repeat(); }
+            catch (Exception ignored) { /* Leave the existing recording request running. */ }
+        }});
+    }
     void start() {
         thread.start(); handler = new Handler(thread.getLooper());
         handler.post(new Runnable() { public void run() { open(); }});
@@ -43,12 +56,12 @@ final class CameraRecorder {
     }
     private void open() {
         try {
-            store.recover(); ClipAssembler.enqueue(context, false);
+            if (recording) { store.recover(); ClipAssembler.enqueue(context, false); }
             android.content.Intent battery = context.registerReceiver(null, new android.content.IntentFilter(android.content.Intent.ACTION_BATTERY_CHANGED));
             if (battery != null && battery.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, 0) >= 450) throw new IllegalStateException("Battery temperature too high");
             if (Build.VERSION.SDK_INT >= 29 && ((PowerManager)context.getSystemService(Context.POWER_SERVICE)).getCurrentThermalStatus() >= PowerManager.THERMAL_STATUS_SEVERE)
                 throw new IllegalStateException("Device thermal protection active");
-            if (!store.makeSpace()) throw new IllegalStateException("Storage quota or free-space reserve reached");
+            if (recording && !store.makeSpace()) throw new IllegalStateException("Storage quota or free-space reserve reached");
             CameraManager manager = (CameraManager)context.getSystemService(Context.CAMERA_SERVICE);
             String selected = null; CameraCharacteristics chosen = null;
             for (String id : manager.getCameraIdList()) {
@@ -58,57 +71,88 @@ final class CameraRecorder {
             if (selected == null) throw new IllegalStateException("Rear camera unavailable");
             StreamConfigurationMap map = chosen.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
             boolean supported = false;
-            for (Size size : map.getOutputSizes(MediaCodec.class)) if (size.getWidth() == 1920 && size.getHeight() == 1080) supported = true;
-            if (!supported) throw new IllegalStateException("Rear camera does not expose 1080p recording");
+            Size[] videoSizes = map.getOutputSizes(MediaCodec.class);
+            if (videoSizes != null) for (Size size : videoSizes) if (size.getWidth() == 1920 && size.getHeight() == 1080) supported = true;
+            if (recording && !supported) throw new IllegalStateException("Rear camera does not expose 1080p recording");
             Range<Integer>[] ranges = chosen.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES);
             if (ranges != null) for (Range<Integer> range : ranges) {
                 if (range.contains(30) && (frameRange == null || range.getLower() > frameRange.getLower() ||
                     (range.getLower().equals(frameRange.getLower()) && range.getUpper() < frameRange.getUpper()))) frameRange = range;
             }
-            if (frameRange == null) throw new IllegalStateException("30 fps camera mode unavailable");
+            if (recording && frameRange == null) throw new IllegalStateException("30 fps camera mode unavailable");
             int[] focusModes = chosen.get(CameraCharacteristics.CONTROL_AF_AVAILABLE_MODES);
             if (focusModes != null) for (int mode : focusModes) if (mode == CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO) continuousFocus = true;
             int rotation = ((WindowManager)context.getSystemService(Context.WINDOW_SERVICE)).getDefaultDisplay().getRotation();
             orientation = (chosen.get(CameraCharacteristics.SENSOR_ORIENTATION) - rotation * 90 + 360) % 360;
-            MediaFormat config = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, 1920, 1080);
-            config.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface);
-            config.setInteger(MediaFormat.KEY_BIT_RATE, 8000000); config.setInteger(MediaFormat.KEY_FRAME_RATE, 30);
-            config.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 2);
-            encoder = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC);
-            String codecName = encoder.getName();
-            if ((Build.VERSION.SDK_INT >= 29 && !encoder.getCodecInfo().isHardwareAccelerated()) || codecName.startsWith("OMX.google.") || codecName.startsWith("c2.android."))
-                throw new IllegalStateException("Hardware video encoder unavailable");
-            encoder.configure(config, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
-            surface = encoder.createInputSurface(); encoder.start(); started = true; wall = System.currentTimeMillis();
+            Size previewSize = CameraPreviewFrames.choose(map.getOutputSizes(ImageFormat.YUV_420_888));
+            if (previewSize != null) {
+                try { preview = new CameraPreviewFrames(previewSize, orientation, handler); preview.listen(previewListener); }
+                catch (RuntimeException e) { if (!recording) throw e; previewUnavailable(); }
+            } else if (!recording) throw new IllegalStateException("Camera preview unavailable");
+            else previewUnavailable();
+            if (recording) {
+                MediaFormat config = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, 1920, 1080);
+                config.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface);
+                config.setInteger(MediaFormat.KEY_BIT_RATE, 8000000); config.setInteger(MediaFormat.KEY_FRAME_RATE, 30);
+                config.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 2);
+                encoder = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC);
+                String codecName = encoder.getName();
+                if ((Build.VERSION.SDK_INT >= 29 && !encoder.getCodecInfo().isHardwareAccelerated()) || codecName.startsWith("OMX.google.") || codecName.startsWith("c2.android."))
+                    throw new IllegalStateException("Hardware video encoder unavailable");
+                encoder.configure(config, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
+                surface = encoder.createInputSurface(); encoder.start(); started = true; wall = System.currentTimeMillis();
+            }
             opening = true;
             manager.openCamera(selected, new CameraDevice.StateCallback() {
                 public void onOpened(CameraDevice device) {
                     opening = false;
                     if (finished || closing) { device.close(); if (finished) thread.quitSafely(); return; }
                     camera = device;
-                    try {
-                        camera.createCaptureSession(Collections.singletonList(surface), new CameraCaptureSession.StateCallback() {
-                            public void onConfigured(CameraCaptureSession capture) {
-                                if (finished || closing) { capture.close(); return; }
-                                session = capture;
-                                try {
-                                    CaptureRequest.Builder request = camera.createCaptureRequest(CameraDevice.TEMPLATE_RECORD);
-                                    request.addTarget(surface);
-                                    request.set(CaptureRequest.CONTROL_MODE, CaptureRequest.CONTROL_MODE_AUTO);
-                                    request.set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, frameRange);
-                                    if (continuousFocus) request.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO);
-                                    session.setRepeatingRequest(request.build(), null, handler);
-                                } catch (Exception e) { requestStop("Camera capture failed: " + e.getClass().getSimpleName()); }
-                            }
-                            public void onConfigureFailed(CameraCaptureSession capture) { requestStop("Camera configuration failed"); }
-                        }, handler);
-                    } catch (Exception e) { requestStop("Camera session failed: " + e.getClass().getSimpleName()); }
+                    createSession();
                 }
                 public void onDisconnected(CameraDevice device) { opening = false; device.close(); if (finished) thread.quitSafely(); requestStop("Camera disconnected"); }
                 public void onError(CameraDevice device, int error) { opening = false; device.close(); if (finished) thread.quitSafely(); requestStop("Camera error " + error); }
             }, handler);
-            handler.post(drain);
+            if (recording) handler.post(drain);
         } catch (Exception e) { opening = false; reason = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage(); finish(); }
+    }
+    private void createSession() {
+        try {
+            ArrayList<Surface> targets = new ArrayList<Surface>();
+            if (surface != null) targets.add(surface);
+            if (preview != null) targets.add(preview.surface());
+            camera.createCaptureSession(targets, new CameraCaptureSession.StateCallback() {
+                public void onConfigured(CameraCaptureSession capture) {
+                    if (finished || closing) { capture.close(); return; }
+                    session = capture;
+                    try {
+                        repeat();
+                    } catch (Exception e) { if (!withoutPreview()) requestStop("Camera capture failed: " + e.getClass().getSimpleName()); }
+                }
+                public void onConfigureFailed(CameraCaptureSession capture) {
+                    capture.close();
+                    if (finished || closing) return;
+                    if (!withoutPreview()) requestStop("Camera configuration failed");
+                }
+            }, handler);
+        } catch (Exception e) { if (!withoutPreview()) requestStop("Camera session failed: " + e.getClass().getSimpleName()); }
+    }
+    private void previewUnavailable() {
+        context.getSharedPreferences("dashcam", 0).edit().putString("previewStatus", "Preview unavailable on this camera configuration; recording can continue").apply();
+    }
+    private boolean withoutPreview() {
+        if (!recording || preview == null || finished || closing) return false;
+        if (session != null) { session.close(); session = null; }
+        preview.close(); preview = null; previewUnavailable(); createSession(); return true;
+    }
+    private void repeat() throws CameraAccessException {
+        CaptureRequest.Builder request = camera.createCaptureRequest(recording ? CameraDevice.TEMPLATE_RECORD : CameraDevice.TEMPLATE_PREVIEW);
+        if (surface != null) request.addTarget(surface);
+        if (preview != null && (!recording || previewListener != null)) request.addTarget(preview.surface());
+        request.set(CaptureRequest.CONTROL_MODE, CaptureRequest.CONTROL_MODE_AUTO);
+        if (frameRange != null) request.set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, frameRange);
+        if (continuousFocus) request.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO);
+        session.setRepeatingRequest(request.build(), null, handler);
     }
     private void requestStop(String why) {
         if (finished || closing) return;
@@ -160,6 +204,7 @@ final class CameraRecorder {
         MediaCodec.BufferInfo adjusted = new MediaCodec.BufferInfo();
         adjusted.set(info.offset, info.size, pts - fragmentStart, info.flags);
         mux.writeSampleData(track, data, adjusted); lastSample = pts;
+        listener.written();
     }
     private void openFragment(long pts) throws Exception {
         fragment = store.beginFragment(clip); fragmentStart = pts;
@@ -183,7 +228,9 @@ final class CameraRecorder {
         if (clip != null) store.seal(clip);
         if (encoder != null) { try { if (started) encoder.stop(); } catch (RuntimeException ignored) {} encoder.release(); }
         if (surface != null) surface.release();
-        ClipAssembler.enqueue(context, false); listener.stopped(reason);
+        if (preview != null) { preview.close(); preview = null; }
+        previewListener = null;
+        if (recording) ClipAssembler.enqueue(context, false); listener.stopped(reason);
         // An asynchronous open callback must still be allowed to close its returned camera.
         if (!opening) thread.quitSafely();
         else handler.postDelayed(new Runnable() { public void run() { thread.quitSafely(); } }, 15000);
