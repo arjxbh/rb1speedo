@@ -49,7 +49,7 @@ Cloud copies require deploying the included API and pairing the phone once. Uplo
 
 Power, camera and thermal failures are visible in Camera status. Recording stops at severe OS thermal status or battery temperature of 45°C; test the mounted phone before relying on it. No microphone permission or audio recording is added. A phone reboot schedules uploads and, when notifications are permitted, offers a reminder to open the dashboard. It does not start a camera from a boot receiver or guarantee that the phone powers itself on after battery exhaustion. Open RB1 once after reboot; an unattended start from a locked/background device is not promised.
 
-See [the design and authentication mechanism](docs/DASHCAM_DESIGN.md) and [the guarded EC2 deployment runbook](infra/README.md). The implementation has local build and automated checks; live deployment, physical camera/thermal testing, and end-to-end S3 testing are still pending. The proposed default API hostname is `dashcam.midlifemotor.club`; it is not live until DNS and deployment are completed.
+See [the design and authentication mechanism](docs/DASHCAM_DESIGN.md) and [the guarded EC2 deployment runbook](infra/README.md). The initial owner-run AWS deployment has completed and passed template, shared-host, SSM and all four existing-site checks. The API is live at `https://dashcam.midlifemotor.club`. Physical camera/thermal testing and end-to-end phone/S3 upload testing remain pending.
 
 ## Behavior and privacy
 

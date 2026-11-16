@@ -53,6 +53,14 @@ npm run deploy -- --profile YOUR_PROFILE --domain dashcam.midlifemotor.club --ex
 
 The review expires after one hour. Execution rechecks the live snapshot and four sites and compares both the exact change list and original CloudFormation template with the review. It refuses if anything changed. It then executes only that change-set ARN and waits for CloudFormation/SSM success before checking the shared host and all dependent stacks/policies/sites again. No original stack policy is changed or disabled.
 
+If the CLI exits after submitting a change set, do not submit it again. `ExecuteChangeSet` normally has an empty successful response. Finish the read-only checks against the retained review with:
+
+```sh
+npm run deploy -- --profile YOUR_PROFILE --domain dashcam.midlifemotor.club --verify
+```
+
+Verification performs no deployment or execution. It requires a completed RB1 stack, the exact deployed template, the unchanged shared-host snapshot, successful SSM installation on that host, and healthy HTTPS endpoints for RB1 and the four existing sites. It is also available after the one-hour execution review expires. Future executions use a deterministic CloudFormation request token and reject an already-submitted change set.
+
 The host script:
 
 - Requires Node 24 already installed, a healthy Caddy service, the shared Caddy import contract, and a free/RB1-owned loopback port 3081. It installs no host packages and modifies no firewall or networking.
@@ -90,4 +98,4 @@ These commands require the RB1 environment variables, so prefix them with the `s
 
 ## Validation still required before relying on this
 
-No production deployment or device/real-S3 integration test was performed as part of implementation. First verify the exact prepared change set and DNS. After deployment, test enrollment, a real interrupted multipart upload, remote checksum verification and playback, revocation, and retry after phone reboot. While parked, verify camera framing and orientation, final partial clips, an hour of continuous recording, fragment/clip boundaries, free-space handling, incident protection, thermal shutdown, and uploads after ignition-off with screen off. Check all original speedometer/audio/brightness functions. Avoid making a recording-reliability claim until the actual phone passes these tests.
+The initial owner-run deployment has completed and passed read-only verification of the deployed template, shared-host snapshot, SSM installation, API health, and all four existing sites. Device/real-S3 integration tests remain pending. For subsequent deployments, first verify the exact prepared change set and DNS. After deployment, test enrollment, a real interrupted multipart upload, remote checksum verification and playback, revocation, and retry after phone reboot. While parked, verify camera framing and orientation, final partial clips, an hour of continuous recording, fragment/clip boundaries, free-space handling, incident protection, thermal shutdown, and uploads after ignition-off with screen off. Check all original speedometer/audio/brightness functions. Avoid making a recording-reliability claim until the actual phone passes these tests.

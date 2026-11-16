@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const cdk = require('aws-cdk-lib');
 const { Template } = require('aws-cdk-lib/assertions');
 const { DashcamStack } = require('../stack.cjs');
-const { assertTemplate, assertChanges, discover, parseAwsOutput, readStackPolicy } = require('../scripts/deploy.cjs');
+const { assertTemplate, assertChanges, discover, parseAwsOutput, readStackPolicy, verifyCompletedDeployment } = require('../scripts/deploy.cjs');
 const host = 'i-00000000000000000', role = 'ValidationOnlyRole';
 const app = new cdk.App();
 const template = Template.fromStack(new DashcamStack(app, 'RB1DashcamStack', { env: { account: '123456789012', region: 'us-east-1' },
@@ -64,6 +64,7 @@ test('host install script preserves root Caddy configuration and isolates servic
 test('only a successful optional stack-policy lookup accepts empty CLI output', () => {
   assert.deepEqual(parseAwsOutput('', 'cloudformation', 'get-stack-policy'), {});
   assert.deepEqual(parseAwsOutput(' \n', 'cloudformation', 'get-stack-policy'), {});
+  assert.deepEqual(parseAwsOutput('', 'cloudformation', 'execute-change-set'), {});
   for (const response of [{}, null, { StackPolicyBody: null }]) {
     assert.equal(readStackPolicy(() => response, 'MidlifeMotorClubStack'), null);
   }
@@ -106,4 +107,23 @@ test('discovery preserves absent optional policies while keeping PiggyLedger pro
   assert.ok(snapshot.stacks.PiggyLedgerStack.policy);
   assert.throws(() => discover(fakeDiscovery({ piggyPolicy: false })), /Shared host stack protection missing or changed/);
   assert.throws(() => discover(fakeDiscovery({ policyError: 'AccessDenied' })), /MidlifeMotorClubStack: AccessDenied/);
+});
+test('completed-deployment recovery is read-only and checks template, original host and SSM target', async () => {
+  const snapshot = discover(fakeDiscovery());
+  const reviewed = { domain: 'dashcam.example.com', snapshot, template };
+  const calls = [];
+  const aws = (service, operation) => {
+    calls.push(operation);
+    if (operation === 'describe-stacks') return { Stacks: [{ StackStatus: 'CREATE_COMPLETE' }] };
+    if (operation === 'get-template') return { TemplateBody: template };
+    if (operation === 'list-associations') return { Associations: [{ AssociationName: 'RB1DashcamStack-api-deployment',
+      Overview: { Status: 'Success' }, Targets: [{ Key: 'InstanceIds', Values: [host] }] }] };
+    throw new Error('Read-only verification attempted unexpected operation: ' + operation);
+  };
+  const options = { checkSites: async () => {}, request: async () => ({ ok: true, json: async () => ({ service: 'rb1-dashcam' }) }) };
+  await verifyCompletedDeployment(aws, reviewed, reviewed.domain, snapshot, options);
+  assert.deepEqual(calls, ['describe-stacks', 'get-template', 'list-associations']);
+  await assert.rejects(verifyCompletedDeployment(aws, reviewed, reviewed.domain, { ...snapshot, host: 'i-changed' }, options), /differs/);
+  await assert.rejects(verifyCompletedDeployment((s, op) => op === 'describe-stacks' ? { Stacks: [{ StackStatus: 'ROLLBACK_COMPLETE' }] } : aws(s, op),
+    reviewed, reviewed.domain, snapshot, options), /not complete/);
 });

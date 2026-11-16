@@ -1,6 +1,6 @@
 # RB1 Speed dashcam design and implementation
 
-Status: implemented for local validation in version 1.6.0, November 15, 2026. No live AWS deployment or physical-device camera/S3 test has been performed. This document distinguishes implemented behavior from remaining acceptance gates. See `infra/README.md` for the guarded deployment runbook.
+Status: implemented for local validation in version 1.6.0, November 15, 2026. The initial owner-run AWS deployment has since completed and passed read-only template, shared-host, policy, SSM and site checks. Physical-device camera/S3 upload testing remains pending. This document distinguishes implemented behavior from remaining acceptance gates. See `infra/README.md` for the guarded deployment runbook.
 
 ## Recommendation
 

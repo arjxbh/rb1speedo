@@ -1,3 +1,9 @@
+# Empty execution response and post-deployment verification
+
+- Successful `execute-change-set` calls may have no CLI output. The parser now accepts this exact operation without hiding failures or allowing empty responses from unrelated discovery operations.
+- Added read-only `--verify` recovery for a previously submitted deployment, including original-template comparison, reviewed shared-host snapshot, exact SSM target/status, and all existing and new API/site checks. Already-submitted changes are not executed twice; future submissions use a deterministic client request token.
+- All 21 API/CDK tests passed, including parser and read-only recovery regressions. Following the owner's execution, AWS reported RB1 `CREATE_COMPLETE`, SSM installation `Success`, the API `/health` was healthy, and all four existing sites/redirects and dependent API checks passed. The full read-only verifier also confirmed the deployed template and original shared-host/stack/policy snapshot match the review. No additional deployment was submitted to investigate the CLI error.
+
 # Deployment parser fix after 1.6.0
 
 - A successful AWS CLI `get-stack-policy` can emit an empty response for a stack with no policy. The deployment parser now records this optional absence without swallowing AWS command failures or empty output from unrelated discovery operations.
