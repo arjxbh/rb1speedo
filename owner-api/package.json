@@ -1,0 +1,7 @@
+{
+  "name": "rb1-owner-pairing",
+  "version": "1.0.0",
+  "private": true,
+  "engines": { "node": ">=24" },
+  "dependencies": { "@aws-sdk/client-dynamodb": "^3.850.0" }
+}

@@ -21,12 +21,18 @@ jobs:
           node-version: '24'
           cache: npm
       - run: npm ci --ignore-scripts
+      - run: npm run build:owner
       - run: npm test
       - name: Synthesize an isolated validation template
         env:
           CDK_DEFAULT_ACCOUNT: '123456789012'
           CDK_DEFAULT_REGION: us-east-1
         run: npm run synth -- -c instanceId=i-00000000000000000 -c instanceRoleName=ValidationOnlyRole -c domain=dashcam.example.com --quiet
+      - name: Synthesize the separate IAM owner endpoint
+        env:
+          CDK_DEFAULT_ACCOUNT: '123456789012'
+          CDK_DEFAULT_REGION: us-east-1
+        run: npm run synth:owner -- -c tableName=ValidationMetadata -c apiUrl=https://dashcam.example.com --quiet
 
   build:
     runs-on: ubuntu-24.04

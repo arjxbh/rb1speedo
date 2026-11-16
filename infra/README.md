@@ -74,6 +74,8 @@ The host role is still shared: Unix users and systemd hardening do not create a 
 
 ## Pair the phone
 
+For routine owner pairing without SSM, deploy the separate IAM-authenticated owner endpoint once and run `npm run pair` from your laptop. See [Owner pairing with SigV4](../docs/OWNER_PAIRING.md) for the guarded owner-stack deployment, IAM permissions, and profile options. This does not change EC2, Caddy, or the phone app. The server-shell command below remains an operator fallback.
+
 After a successful deployment, open an authorized Session Manager shell on the shared host. Generate a one-time code using the RB1 environment and application only:
 
 ```sh

@@ -1,3 +1,10 @@
+# IAM-authenticated owner pairing endpoint
+
+- Added a separate Lambda Function URL with AWS_IAM authentication and a profile-aware SigV4 laptop helper (`npm run pair`). No EC2/Caddy/Android changes are required for this feature.
+- New tests cover missing/wrong-account IAM context, allowed route/body, code length/verifier/expiry, no secret logging, issuance limits, failure handling, one-time compatibility with the existing phone enrollment API, temporary-session SigV4 signing and the two required caller permissions.
+- CDK tests reject public URLs, attachment to existing roles, broad DynamoDB writes, and EC2/SSM/table ownership. The owner execution role can write only PAIR#/PAIR-RATE# records and its own logs. The separate deployment guard preserves the original shared-host and RB1 snapshots and checks all four sites plus the phone API.
+- Full local suite: 30 tests passed. Separate owner synth and packaging checks passed. The owner endpoint has not been deployed or invoked in AWS; existing live applications are unchanged by this implementation.
+
 # Empty execution response and post-deployment verification
 
 - Successful `execute-change-set` calls may have no CLI output. The parser now accepts this exact operation without hiding failures or allowing empty responses from unrelated discovery operations.

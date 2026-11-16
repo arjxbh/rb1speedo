@@ -9,3 +9,4 @@ node_modules/
 cdk.out*/
 infra/review.json
 *.local.json
+infra/owner-review.json

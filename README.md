@@ -41,6 +41,8 @@ Tap **Debug** beside Demo for live checks while parked. The panel refreshes twic
 
 ## Dashcam (1.6.0)
 
+For owner pairing without a server shell, the optional [IAM/SigV4 owner endpoint](docs/OWNER_PAIRING.md) lets you run `npm run pair` on your laptop using your existing AWS profile. Its separate CDK stack does not change the shared EC2 host or require a phone update.
+
 Tap **Camera** to enable silent rear-camera recording while externally powered. The app creates approximately 15-minute, 1080p/30 fps MP4 clips at 8 Mbps, plus a shorter last clip after ten seconds unplugged. Boundaries use keyframes, so clips can run slightly over 15 minutes. Recording survives leaving the dashboard and has a foreground notification with Stop. Normal screen timeout still applies on battery.
 
 The default local loop is 32 GiB, configurable to 8/16/32/64 GiB, with a 5 GiB free-space reserve. It deletes uploaded ordinary clips first, then oldest unprotected unsynced clips when necessary. **Save incident** protects the latest two clips and the next clip; protection can fill the loop and pause recording. **View local clips** supports playback, sharing, deleting local files, and allowing local overwrite. Protected S3 copies remain protected if local protection is removed. Uninstalling or clearing app data removes private local footage and pairing credentials.

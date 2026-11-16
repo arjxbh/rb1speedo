@@ -6,17 +6,24 @@
     "node": ">=24"
   },
   "scripts": {
-    "test": "node server/test/api.test.cjs && node infra/test/safety.test.cjs",
+    "test": "node server/test/api.test.cjs && node infra/test/safety.test.cjs && node owner-api/test/owner.test.cjs",
     "synth": "cdk synth --app 'node infra/app.cjs'",
     "diff": "cdk diff --app 'node infra/app.cjs'",
     "deploy": "node infra/scripts/deploy.cjs",
-    "start": "node server/main.cjs"
+    "start": "node server/main.cjs",
+    "pair": "node scripts/pair.cjs",
+    "build:owner": "npm ci --prefix owner-api --omit=dev --ignore-scripts",
+    "synth:owner": "cdk synth --app 'node infra/owner-app.cjs' --output cdk.out-owner",
+    "deploy:owner": "node infra/scripts/deploy-owner.cjs"
   },
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.850.0",
     "@aws-sdk/client-s3": "^3.850.0",
+    "@aws-sdk/credential-providers": "^3.1169.0",
     "@aws-sdk/lib-dynamodb": "^3.850.0",
-    "@aws-sdk/s3-request-presigner": "^3.850.0"
+    "@aws-sdk/s3-request-presigner": "^3.850.0",
+    "@smithy/hash-node": "^4.5.2",
+    "@smithy/signature-v4": "^5.7.5"
   },
   "devDependencies": {
     "aws-cdk": "^2.173.1",

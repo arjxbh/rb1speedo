@@ -114,6 +114,8 @@ S3 presigned URLs are bearer capabilities and can be reused until they expire. U
 
 ## Authentication mechanism (implemented)
 
+Owner codes can now be issued by a separate IAM/SigV4-authenticated Lambda Function URL. After its one-time guarded deployment, `npm run pair` uses the owner's existing AWS profile from the laptop; no Session Manager session is required. The Lambda can write only pairing/issuance-counter records in the RB1 table and cannot read device credentials or footage. See [Owner pairing design and commands](OWNER_PAIRING.md). The original backend CLI described below remains an operator fallback; phone enrollment and token renewal are unchanged.
+
 Authentication belongs to the RB1 API and never reuses Piggy Ledger family credentials, sessions, cookies, or database records. The phone has no AWS access key, IAM credentials, or server administration credential.
 
 1. **Pair once.** The owner runs the backend-only `admin.cjs pair` command using existing authorized AWS/host access. It creates a random 256-bit, URL-safe code valid for ten minutes; DynamoDB stores only its SHA-256 verifier. The phone submits the code to `POST /v1/enroll` over HTTPS on selected Wi-Fi. An atomic transaction consumes the code and creates a random device ID. A code cannot enroll two devices, including under concurrent requests.
