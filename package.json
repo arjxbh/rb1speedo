@@ -1,0 +1,26 @@
+{
+  "name": "rb1-speed-dashcam",
+  "private": true,
+  "version": "1.6.0",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "test": "node server/test/api.test.cjs && node infra/test/safety.test.cjs",
+    "synth": "cdk synth --app 'node infra/app.cjs'",
+    "diff": "cdk diff --app 'node infra/app.cjs'",
+    "deploy": "node infra/scripts/deploy.cjs",
+    "start": "node server/main.cjs"
+  },
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.850.0",
+    "@aws-sdk/client-s3": "^3.850.0",
+    "@aws-sdk/lib-dynamodb": "^3.850.0",
+    "@aws-sdk/s3-request-presigner": "^3.850.0"
+  },
+  "devDependencies": {
+    "aws-cdk": "^2.173.1",
+    "aws-cdk-lib": "2.277.0",
+    "constructs": "^10.0.0"
+  }
+}

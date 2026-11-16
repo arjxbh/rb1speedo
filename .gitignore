@@ -5,3 +5,7 @@ build-native/
 local.properties
 .idea/
 *.iml
+node_modules/
+cdk.out*/
+infra/review.json
+*.local.json

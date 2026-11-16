@@ -1,3 +1,14 @@
+Dashcam and private Wi-Fi cloud copies (1.6.0, pending deployment/device acceptance).
+
+- Optional silent rear-camera recording alongside the speedometer: 1080p/30 fps, 15-minute MP4s with shorter last-trip clips, one-minute recoverable recording fragments, a foreground notification and ten-second power-disconnect debounce.
+- Configurable local loop, free-space reserve, incident protection, playback/share and local cleanup controls. Enabling recording explains possible overwrite before upload.
+- Durable Wi-Fi-only, resumable multipart uploads after parking, with battery/time/thermal limits, signed part checksums and verified remote completion.
+- One-time device pairing, Android Keystore-protected refresh credentials, automatic 15-minute API access renewal, 90-day inactivity expiry and owner revocation. No AWS keys on the phone.
+- Additive CDK stack/API for the existing shared EC2 host, with private S3 storage, 30-day routine retention, separate metadata, audit and budget monitoring. Guarded deployment requires exact change-set review and preserves/verifies Piggy Ledger, Midlife Motors, Kaedama and The Cranky Goose.
+- Boot schedules uploads and offers an open-dashboard reminder when notifications are allowed; the app does not launch a camera from boot or guarantee automatic power-on after battery exhaustion.
+
+Local native build/model checks, API and CDK safety checks, synth, alignment and existing-key signing passed. No live AWS deployment, real S3 upload or physical camera/thermal soak has been performed. Review docs/DASHCAM_DESIGN.md and infra/README.md before deployment. New permissions support camera, foreground recording, network/upload scheduling, notifications and a bounded recording wake lock; no microphone permission is requested.
+
 Debug controls for mounted-phone setup (1.5.1).
 
 - Open Debug alongside Demo for live power, screen timeout, actual media volume, light-sensor, greeting and requested brightness status.

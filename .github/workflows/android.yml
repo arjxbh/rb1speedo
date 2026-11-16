@@ -11,6 +11,23 @@ permissions:
   contents: read
 
 jobs:
+  cloud-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm test
+      - name: Synthesize an isolated validation template
+        env:
+          CDK_DEFAULT_ACCOUNT: '123456789012'
+          CDK_DEFAULT_REGION: us-east-1
+        run: npm run synth -- -c instanceId=i-00000000000000000 -c instanceRoleName=ValidationOnlyRole -c domain=dashcam.example.com --quiet
+
   build:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
@@ -39,7 +56,7 @@ jobs:
 
   release:
     if: startsWith(github.ref, 'refs/tags/') && github.event_name == 'push'
-    needs: build
+    needs: [build, cloud-tests]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:

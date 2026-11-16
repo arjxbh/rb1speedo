@@ -62,6 +62,7 @@ public class MainActivity extends Activity implements LocationListener {
             powered = intent.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) != 0;
             if (active) {
                 updatePower();
+                if (powered) DashcamService.maybeStart(MainActivity.this);
                 if (powered && !wasPowered && ((PowerManager)getSystemService(POWER_SERVICE)).isInteractive()) greetOnce();
             }
         }
@@ -124,6 +125,8 @@ public class MainActivity extends Activity implements LocationListener {
             "\nGreeting used this screen session: " + (greetingShown ? "yes" : "no") +
             "\n\nLight sensor: " + sensor + "\nBrightness source: " + brightnessSource +
             "\nRequested app brightness: " + (output < 0 ? "Android system setting" : Math.round(output * 100) + "%") +
+            "\n\nDashcam: " + getSharedPreferences("dashcam", 0).getString("cameraStatus", "not started") +
+            "\nUploads: " + getSharedPreferences("dashcam", 0).getString("uploadStatus", "not started") +
             "\n\nBrightness is an app request, not a measurement of panel output. Tests return to automatic control after five seconds.\n" +
             "Cover/uncover the sensor or unplug/reconnect power to check live values. Touching controls restarts Android’s idle timer.");
     }
@@ -203,6 +206,7 @@ public class MainActivity extends Activity implements LocationListener {
         if (light != null) sensors.registerListener(lightListener, light, SensorManager.SENSOR_DELAY_NORMAL);
         updateBrightness();
         audio.resume(false); greetOnce(); startGps(); handler.post(ticker);
+        DashcamService.maybeStart(this); UploadJob.schedule(this, false);
     }
     @Override public void onPause() {
         active = false; handler.removeCallbacks(ticker); audio.pause();
@@ -373,6 +377,9 @@ public class MainActivity extends Activity implements LocationListener {
         controls.addView(button("Updates",new View.OnClickListener() { public void onClick(View view) { openUpdates(); }}),weightedButton());
         demoButton=button("Demo",new View.OnClickListener() { public void onClick(View view) { toggleDemo(); }});
         controls.addView(demoButton,weightedButton());
+        controls.addView(button("Camera", new View.OnClickListener() {
+            public void onClick(View view) { startActivity(new Intent(MainActivity.this, DashcamActivity.class)); }
+        }), weightedButton());
         controls.addView(button("Debug", new View.OnClickListener() {
             public void onClick(View view) { openDebug(); }
         }), weightedButton());

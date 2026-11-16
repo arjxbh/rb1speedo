@@ -39,11 +39,23 @@ The ambient light sensor controls brightness inside the dashboard: approximately
 
 Tap **Debug** beside Demo for live checks while parked. The panel refreshes twice per second and shows external power, the keep-screen-on flag, system timeout, actual media volume and its 70% target step, greeting state, sensor lux, brightness source, and requested app brightness. **Apply 70% media volume** reapplies the launch setting; this changes phone media volume and remains after closing. **Test dim** and **Test bright** override brightness for five seconds, then restore automatic control. Closing the panel or leaving the app also clears the preview. Cover/uncover the sensor or unplug/reconnect the charger to watch real inputs change. Requested brightness is not a measurement of physical panel output. Touching the screen restarts Android’s idle timeout.
 
+## Dashcam (1.6.0)
+
+Tap **Camera** to enable silent rear-camera recording while externally powered. The app creates approximately 15-minute, 1080p/30 fps MP4 clips at 8 Mbps, plus a shorter last clip after ten seconds unplugged. Boundaries use keyframes, so clips can run slightly over 15 minutes. Recording survives leaving the dashboard and has a foreground notification with Stop. Normal screen timeout still applies on battery.
+
+The default local loop is 32 GiB, configurable to 8/16/32/64 GiB, with a 5 GiB free-space reserve. It deletes uploaded ordinary clips first, then oldest unprotected unsynced clips when necessary. **Save incident** protects the latest two clips and the next clip; protection can fill the loop and pause recording. **View local clips** supports playback, sharing, deleting local files, and allowing local overwrite. Protected S3 copies remain protected if local protection is removed. Uninstalling or clearing app data removes private local footage and pairing credentials.
+
+Cloud copies require deploying the included API and pairing the phone once. Uploads use validated, unmetered Wi-Fi directly (no cellular or VPN fallback), even after ignition-off with the screen off. On battery they stop at 30% or after the 30-minute parking budget; charging removes that budget. Android can defer background jobs. S3 routine copies expire after 30 days from upload; protected copies do not. The phone has no AWS keys. It automatically renews its API credentials and resumes acknowledged upload parts.
+
+Power, camera and thermal failures are visible in Camera status. Recording stops at severe OS thermal status or battery temperature of 45°C; test the mounted phone before relying on it. No microphone permission or audio recording is added. A phone reboot schedules uploads and, when notifications are permitted, offers a reminder to open the dashboard. It does not start a camera from a boot receiver or guarantee that the phone powers itself on after battery exhaustion. Open RB1 once after reboot; an unattended start from a locked/background device is not promised.
+
+See [the design and authentication mechanism](docs/DASHCAM_DESIGN.md) and [the guarded EC2 deployment runbook](infra/README.md). The implementation has local build and automated checks; live deployment, physical camera/thermal testing, and end-to-end S3 testing are still pending. The proposed default API hostname is `dashcam.midlifemotor.club`; it is not live until DNS and deployment are completed.
+
 ## Behavior and privacy
 
 - Uses Android's GPS-reported speed, converted from meters per second to mph.
-- Uses location while the Activity is visible and stops updates when backgrounded. Keeps the screen awake while open and externally powered; unplugging restores the phone’s normal screen timeout.
-- No account, network permission, ads, analytics, location storage, or background service.
+- Uses location while the dashboard Activity is visible and stops GPS updates when backgrounded. Keeps the screen awake while open and externally powered; unplugging restores the phone’s normal screen timeout.
+- No ads, analytics, or GPS route storage. Optional device pairing authorizes cloud video copies. Camera recording uses a foreground service; background jobs upload on eligible Wi-Fi. All remote access uses HTTPS.
 - Missing speed, positional uncertainty over 35 meters, or reported speed uncertainty over 3 m/s is rejected. Readings expire after 4 seconds: the readout becomes a dash and the needle disappears, rather than implying the vehicle stopped.
 - Main number shows whole mph without smoothing; the needle animates between updates. Refresh rate depends on the device.
 - Supports portrait and landscape. Grant precise location for usable speed results.
