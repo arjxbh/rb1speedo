@@ -1,4 +1,4 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="club.midlife.rb1speed">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="org.codeaurora.snapcam">
     <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="35" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
@@ -18,19 +18,19 @@
     </queries>
     <application android:label="RB1 Speed" android:theme="@android:style/Theme.Material.NoActionBar" android:icon="@drawable/icon" android:allowBackup="false" android:usesCleartextTraffic="false" android:supportsRtl="true">
         <meta-data android:name="rb1.fullApp" android:value="true" />
-        <service android:name=".DashcamService" android:exported="false" android:foregroundServiceType="camera" />
-        <service android:name=".UploadJob" android:exported="true" android:permission="android.permission.BIND_JOB_SERVICE" />
-        <provider android:name=".ClipProvider" android:authorities="club.midlife.rb1speed.clips" android:exported="false" android:grantUriPermissions="true" />
-        <receiver android:name=".UploadReceiver" android:exported="false">
+        <service android:name="club.midlife.rb1speed.DashcamService" android:exported="false" android:foregroundServiceType="camera" />
+        <service android:name="club.midlife.rb1speed.UploadJob" android:exported="true" android:permission="android.permission.BIND_JOB_SERVICE" />
+        <provider android:name="club.midlife.rb1speed.ClipProvider" android:authorities="org.codeaurora.snapcam.clips" android:exported="false" android:grantUriPermissions="true" />
+        <receiver android:name="club.midlife.rb1speed.UploadReceiver" android:exported="false">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
                 <action android:name="android.intent.action.ACTION_POWER_CONNECTED" />
                 <action android:name="android.intent.action.ACTION_POWER_DISCONNECTED" />
             </intent-filter>
         </receiver>
-        <activity android:name=".CameraDiagnosticsActivity" android:exported="false" />
-        <activity android:name=".DashcamActivity" android:exported="false" />
-        <activity android:name=".MainActivity" android:exported="true">
+        <activity android:name="club.midlife.rb1speed.CameraDiagnosticsActivity" android:exported="false" />
+        <activity android:name="club.midlife.rb1speed.DashcamActivity" android:exported="false" />
+        <activity android:name="club.midlife.rb1speed.MainActivity" android:exported="true">
             <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
         </activity>
     </application>

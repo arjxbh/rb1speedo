@@ -1,3 +1,11 @@
+Wide camera access is now the default (1.6.9).
+
+- Install RB1-Speed.apk. It now uses the working org.codeaurora.snapcam identity, is named RB1 Speed, and upgrades RB1 Speed · Wide in place using the existing signing certificate. Keep Wide installed while updating to retain its settings, pairing and private recordings.
+- Use the same ultrawide discovery and widest compatible rear-lens selection that worked in Wide; preserve front/rear flipping, power-based recording, uploads, playback/sharing and lens debugging. Camera IDs are not hardcoded.
+- Publish one APK and checksum. Remove separate Wide/helper packaging scripts and variant-specific download routing. Native and Gradle builds now share the same default application identity; the Java namespace stays unchanged.
+- The legacy club.midlife.rb1speed installation remains separate and untouched. Its private settings and footage are not automatically migrated; stop its recording before using the current app. Install this release manually once if upgrading from Wide v1.6.8, whose Updates button targets the previous variant filename.
+- No new Android permissions or AWS deployment. Long-duration power/thermal behavior still needs normal device acceptance.
+
 Full snapcam app for OnePlus auxiliary lenses (1.6.8).
 
 - On OnePlus HD1925, install RB1-Speed-snapcam.apk and open RB1 Speed · Wide. This is the full speedometer/dashcam app under org.codeaurora.snapcam, the package identity confirmed to expose the phone’s rear ultrawide camera 3. Auto should choose camera 3 using the existing widest compatible rear-lens ranking; camera IDs are not hardcoded.

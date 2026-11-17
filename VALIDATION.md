@@ -1,3 +1,12 @@
+# Version 1.6.9 — Wide is the default app
+
+- Native and Gradle application IDs are now `org.codeaurora.snapcam`; the Java namespace and fully qualified component names remain unchanged. The default native output is the sole `RB1-Speed.apk`, labelled RB1 Speed. Separate Wide/helper packaging and variant routing have been removed.
+- Emulator upgrade acceptance seeded a test preference and private file in the installed Wide v1.6.8 app, then installed the default v1.6.9 APK without uninstalling. Both markers survived, and full-app integration passed the new label, full dashboard launch, service/receiver registration, private clip-provider read/query, diagnostics ownership and legacy provider independence checks.
+- Native six model suites, APK alignment and existing-certificate signing passed. Owner reports the preceding Wide build works on HD1925_11_F.05; camera selection and recording implementation are unchanged by this packaging consolidation.
+- The older `club.midlife.rb1speed` app is a separate legacy installation. Its private data is neither migrated nor removed. New default updates preserve the existing Wide app's data and permissions. Old Wide v1.6.8's Updates button targets the retired asset filename; install v1.6.9 manually once using RB1-Speed.apk.
+- Default-target camera-choice, lens-debug and gallery integration suites passed rear/front preview handoffs, candidate metadata/ID probes, live rear previews, cancellation and saved reports, plus generated-H.264 MediaStore publishing/ownership/cleanup.
+- No new Android permissions or AWS changes. Long-running thermal/power acceptance remains device work.
+
 # Version 1.6.8 — full snapcam application
 
 - Native build, six model suites, alignment and existing-certificate signing passed for the normal app and full `RB1-Speed-snapcam.apk`. The generated Wide manifest retains all activities/services/receiver, changes the application identity to `org.codeaurora.snapcam`, and uses a unique clip-provider authority. The launcher opens MainActivity instead of the old probe screen.

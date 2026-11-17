@@ -127,7 +127,7 @@ final class CameraDiagnostics {
     private void packageInfo() {
         log("Installed package: "+context.getPackageName());
         log("Some OnePlus firmware filters auxiliary cameras by app package. An app cannot change its installed package at runtime.");
-        log("RB1-Speed-snapcam.apk is the full RB1 Speed · Wide app using org.codeaurora.snapcam. It replaces the old snapcam-only probe and keeps separate settings from the original RB1. Earlier standalone helpers also tested aweme and meitu identities. No build grants privileged/system access.");
+        log("RB1 Speed uses org.codeaurora.snapcam by default, the identity that exposed the ultrawide lens on HD1925_11_F.05. RB1-Speed.apk updates the previous Wide app in place. The legacy club.midlife.rb1speed app has separate settings and footage. No privileged/system access is granted.");
         for(String key:new String[]{"vendor.camera.aux.packagelist","persist.vendor.camera.privapp.list","persist.camera.privapp.list"}) {
             try {
                 java.lang.Process process=new ProcessBuilder("/system/bin/getprop",key).redirectErrorStream(true).start();

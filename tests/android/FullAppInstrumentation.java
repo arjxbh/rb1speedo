@@ -12,7 +12,7 @@ import android.widget.*;
 import java.io.*;
 import java.util.Arrays;
 
-/** Full-app entry points and private clip provider under either application identity. */
+/** Default app entry points, update identity, and private clip provider. */
 public final class FullAppInstrumentation extends Instrumentation {
     private Activity activity;
     @Override public void onCreate(Bundle args){super.onCreate(args);start();}
@@ -25,7 +25,17 @@ public final class FullAppInstrumentation extends Instrumentation {
     private void exercise() throws Exception {
         Context context=getTargetContext(); PackageManager pm=context.getPackageManager(); String pkg=context.getPackageName();
         ApplicationInfo app=pm.getApplicationInfo(pkg,PackageManager.GET_META_DATA);
+        check(pkg.equals("org.codeaurora.snapcam"),"default package must retain the working Wide identity");
+        check("RB1 Speed".contentEquals(pm.getApplicationLabel(app)),"default app label not merged");
         check(app.metaData!=null && app.metaData.getBoolean("rb1.fullApp"),"full-app metadata missing");
+        SharedPreferences upgrade=context.getSharedPreferences("upgradeAcceptance",0);
+        String token=upgrade.getString("token",null);
+        if(token!=null) {
+            File marker=new File(context.getFilesDir(),"upgrade-acceptance.bin");
+            try(DataInputStream input=new DataInputStream(new FileInputStream(marker))){check(token.equals(input.readUTF()),"upgrade lost private files or preferences");}
+            Bundle progress=new Bundle();progress.putString("stream","Upgrade from "+upgrade.getString("version", "unknown")+" preserved preferences and private file\n");sendStatus(0,progress);
+            check(marker.delete(),"upgrade test marker not removed");upgrade.edit().clear().commit();
+        }
         Intent launch=pm.getLaunchIntentForPackage(pkg);
         check(launch!=null && launch.getComponent().getClassName().equals(MainActivity.class.getName()),"launcher still points to probe");
         check(!pm.getActivityInfo(new ComponentName(context,CameraDiagnosticsActivity.class),0).exported,"debug screen should be private");
@@ -41,7 +51,8 @@ public final class FullAppInstrumentation extends Instrumentation {
                 ByteArrayOutputStream bytes=new ByteArrayOutputStream();byte[] buffer=new byte[4096];int size;
                 while((size=input.read(buffer))!=-1)bytes.write(buffer,0,size);
                 String installed=bytes.toString("UTF-8");
-                check(installed.contains("[club.midlife.rb1speed.clips]") && installed.contains("installed=true"),"original app/provider must coexist");
+                if(installed.contains("installed=true"))
+                    check(installed.contains("[club.midlife.rb1speed.clips]"),"legacy app provider must remain independent");
             }
         }
         ClipStore store=ClipStore.get(context); String id=store.beginClip(System.currentTimeMillis()); File file=new File(store.directory,id+".mp4");
