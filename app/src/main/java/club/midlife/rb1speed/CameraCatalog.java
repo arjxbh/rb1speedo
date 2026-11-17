@@ -71,21 +71,30 @@ final class CameraCatalog {
         }});
         return result;
     }
-    /** Widest rear route with a supported concurrent front camera. */
+    /** Prefer an advertised pair; allow one runtime compatibility attempt when none is advertised. */
     static Option[] concurrent(Context context) throws CameraAccessException {
         if (Build.VERSION.SDK_INT < 30) throw new IllegalStateException("360 recording requires concurrent camera support (Android 11+)");
         CameraManager manager = (CameraManager)context.getSystemService(Context.CAMERA_SERVICE);
+        Set<Set<String>> pairs = manager.getConcurrentCameraIds();
+        Option[] candidate = null;
         for (Option rear : available(context)) {
+            if (rear.physicalId != null || rear.zoom < 1f) continue;
             for (String id : manager.getCameraIdList()) {
                 CameraCharacteristics c = manager.getCameraCharacteristics(id);
                 Integer facing = c.get(CameraCharacteristics.LENS_FACING);
                 if (facing == null || facing != CameraCharacteristics.LENS_FACING_FRONT || !usable(c)) continue;
-                for (Set<String> pair : manager.getConcurrentCameraIds())
+                if (rear.openId.equals(id)) continue;
+                if (candidate == null && rear.physicalId == null && rear.zoom == 1f)
+                    candidate = new Option[]{rear, new Option(id, null, c, 1f)};
+                for (Set<String> pair : pairs)
                     if (pair.contains(rear.openId) && pair.contains(id))
                         return new Option[]{rear, new Option(id, null, c, 1f)};
             }
         }
-        throw new IllegalStateException("360 recording unavailable: no concurrent rear/front 1080p camera pair");
+        // Older vendor HALs may permit opening both cameras without advertising a pair.
+        // Try independent, directly exposed cameras; runtime errors remain authoritative.
+        if (pairs.isEmpty() && candidate != null) return candidate;
+        throw new IllegalStateException("No compatible rear/front 1080p camera pair on " + Build.MODEL + " / " + Build.DISPLAY);
     }
     private static boolean previewable(CameraCharacteristics c) {
         StreamConfigurationMap map = c.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);

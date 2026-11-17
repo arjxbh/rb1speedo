@@ -1,3 +1,12 @@
+Dual-camera startup compatibility (1.6.5).
+
+- Open both cameras before configuring either recording session, following the Camera2 concurrent startup order.
+- When firmware advertises no concurrent camera pairs, try one directly exposed rear/front 1080p pair rather than rejecting the request before opening cameras. This is an experimental compatibility attempt, not a guarantee of dual-camera support on OnePlus firmware.
+- Use encoder-only streams for dual recording to reduce camera resource pressure; aiming preview is unavailable in this mode.
+- Show an immediate start acknowledgement, visible preflight errors and runtime camera failures. Abort stalled dual startup after 15 seconds. Include device/build details in unsupported-pair and timeout messages.
+- Preflight rejection leaves an active rear recording running; runtime rejection after switching can stop both streams. Rear-only recording remains available through Start recording.
+- Native build, six existing test suites, APK alignment and signature checks pass. Actual dual recording on HD1925_11_F.05 remains unverified and requires phone testing. No AWS deployment or new permissions.
+
 Dashboard recording controls (1.6.4).
 
 - Add Start recording, Start 360 recording and Stop recording buttons to the active dashboard.

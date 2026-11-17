@@ -428,6 +428,16 @@ public class MainActivity extends Activity implements LocationListener {
             requestPermissions(new String[]{Manifest.permission.CAMERA}, 81);
             return;
         }
+        if (DashcamService.START_360.equals(action)) {
+            try { CameraCatalog.concurrent(this); }
+            catch (Exception e) {
+                new AlertDialog.Builder(this).setTitle("360 recording unavailable")
+                    .setMessage(e.getMessage() + "\n\n" + (DashcamService.running() ? "Current rear recording continues." : "Use Start recording for the rear camera."))
+                    .setPositiveButton("OK", null).show();
+                return;
+            }
+        }
+        Toast.makeText(this, DashcamService.START_360.equals(action) ? "Starting rear + front recording…" : "Starting rear recording…", Toast.LENGTH_SHORT).show();
         startForegroundService(new Intent(this, DashcamService.class).setAction(action));
     }
     private void refreshDashboard(long now) {

@@ -18,6 +18,7 @@ public final class DashcamService extends Service {
     private CameraRecorder recorder, frontRecorder;
     private static volatile boolean dual;
     private boolean recorderDual, frontStopping;
+    private int camerasOpened;
     static boolean dual() { return dual; }
     static final String START = "club.midlife.rb1speed.START_CAMERA";
     static final String START_360 = "club.midlife.rb1speed.START_360";
@@ -97,7 +98,10 @@ public final class DashcamService extends Service {
         if (!running && previewListener == null) { releaseForeground(); stopSelf(); return; }
         final CameraCatalog.Option[] pair;
         try { pair = running && dual ? CameraCatalog.concurrent(this) : null; }
-        catch (Exception e) { stopRecording(e.getMessage()); report(this, e.getMessage()); return; }
+        catch (Exception e) {
+            getSharedPreferences("dashcam", 0).edit().putLong("cameraRetryAfter", System.currentTimeMillis() + 60000).apply();
+            stopRecording(e.getMessage()); report(this, e.getMessage()); return;
+        }
         recorderRecording = running; recorderDual = dual; frontFrame = 0;
         if (running) {
             lastFrame = 0;
@@ -121,6 +125,9 @@ public final class DashcamService extends Service {
                     getSharedPreferences("dashcam", 0).edit().putString("cameraSelectionStatus", "Camera unavailable; trying the next widest compatible lens").apply();
                     reconcile(); return;
                 }
+                if (wasRecording && recorderDual && running) {
+                    fail360(reason);
+                }
                 if (wasRecording) {
                     running = false; lastFrame = 0;
                     getSharedPreferences("dashcam", 0).edit().putLong("cameraRetryAfter", reason.startsWith("Parked:") ? 0 : System.currentTimeMillis() + 60000).apply();
@@ -133,7 +140,15 @@ public final class DashcamService extends Service {
             }});
         }});
         if (pair != null) {
-            recorder.select(pair[0], false);
+            camerasOpened = 0;
+            final CameraRecorder rear = recorder;
+            Runnable opened = new Runnable() { public void run() {
+                main.post(new Runnable() { public void run() {
+                    if (destroyed || !running || !dual || recorder != rear || switching || frontStopping) return;
+                    if (++camerasOpened == 2 && frontRecorder != null) { rear.configure(); frontRecorder.configure(); }
+                }});
+            }};
+            recorder.select(pair[0], false).whenOpened(opened);
             frontRecorder = new CameraRecorder(this, true, new HashSet<String>(), new CameraRecorder.Listener() {
                 public void written() { if (!destroyed && running && !frontStopping) frontFrame = SystemClock.elapsedRealtime(); }
                 public void stopped(final String reason, String retryCamera) {
@@ -142,13 +157,24 @@ public final class DashcamService extends Service {
                         boolean expected = frontStopping; frontStopping = false;
                         if (destroyed) return;
                         if (expected) reconcile();
-                        else { report(DashcamService.this, "360 recording stopped: " + reason); stopRecording("360 recording stopped: " + reason); }
+                        else fail360(reason);
                     }});
                 }
-            }).select(pair[1], true);
+            }).select(pair[1], true).whenOpened(opened);
             frontRecorder.start();
+            main.postDelayed(new Runnable() { public void run() {
+                if (!destroyed && running && dual && recorder == rear && !switching && !frontStopping && !recording())
+                    fail360("Both cameras did not produce video within 15 seconds on " + Build.MODEL + " / " + Build.DISPLAY);
+            }}, 15000);
         }
         recorder.preview(previewListener); recorder.start();
+    }
+    private void fail360(String reason) {
+        String message = "360 recording stopped: " + reason;
+        getSharedPreferences("dashcam", 0).edit().putLong("cameraRetryAfter", System.currentTimeMillis() + 60000).apply();
+        report(this, message);
+        android.widget.Toast.makeText(this, message, android.widget.Toast.LENGTH_LONG).show();
+        stopRecording(message);
     }
     private void changeCamera() {
         rejectedCameras.clear(); lastFrame = 0;
@@ -172,6 +198,16 @@ public final class DashcamService extends Service {
         } else if (intent != null && CHANGE_CAMERA.equals(intent.getAction())) {
             changeCamera();
         } else {
+            if (intent != null && START_360.equals(intent.getAction())) {
+                // Validate before changing the requested mode or closing an active rear camera.
+                try { CameraCatalog.concurrent(this); }
+                catch (Exception e) {
+                    if (!running) foreground(); // Satisfy startForegroundService even when rejected.
+                    android.widget.Toast.makeText(this, "360 recording unavailable: " + e.getMessage(), android.widget.Toast.LENGTH_LONG).show();
+                    if (!running) { report(this, e.getMessage()); releaseForeground(); stopSelf(); }
+                    return START_NOT_STICKY;
+                }
+            }
             if (intent != null && (START.equals(intent.getAction()) || START_360.equals(intent.getAction()))) {
                 dual = START_360.equals(intent.getAction());
                 getSharedPreferences("dashcam", 0).edit().putBoolean("enabled", true).putString("cameraChoice", CameraCatalog.AUTO).apply();

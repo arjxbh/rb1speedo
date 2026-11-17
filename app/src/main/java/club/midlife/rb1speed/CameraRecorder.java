@@ -27,6 +27,7 @@ final class CameraRecorder {
     private CameraCatalog.Option selected;
     private CameraCatalog.Option forced;
     private boolean front;
+    private Runnable opened;
     private boolean automatic, cameraFailure;
     private CameraPreviewFrames preview;
     private volatile CameraPreviewFrames.Listener previewListener;
@@ -48,6 +49,12 @@ final class CameraRecorder {
         this.context = context; this.recording = recording; this.rejected = rejected; this.listener = listener; store = ClipStore.get(context);
     }
     CameraRecorder select(CameraCatalog.Option option, boolean front) { this.forced = option; this.front = front; return this; }
+    CameraRecorder whenOpened(Runnable callback) { opened = callback; return this; }
+    void configure() {
+        if (handler != null) handler.post(new Runnable() { public void run() {
+            if (!finished && !closing && camera != null && session == null) createSession();
+        }});
+    }
     void preview(CameraPreviewFrames.Listener listener) {
         previewListener = listener;
         if (handler != null) handler.post(new Runnable() { public void run() {
@@ -107,8 +114,8 @@ final class CameraRecorder {
                 if (controlFocus != null) for (int mode : controlFocus) if (mode == CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO) continuousFocus = true;
             }
             int rotation = ((WindowManager)context.getSystemService(Context.WINDOW_SERVICE)).getDefaultDisplay().getRotation();
-            orientation = (chosen.get(CameraCharacteristics.SENSOR_ORIENTATION) - rotation * 90 + 360) % 360;
-            Size previewSize = CameraPreviewFrames.choose(map.getOutputSizes(ImageFormat.YUV_420_888));
+            orientation = (chosen.get(CameraCharacteristics.SENSOR_ORIENTATION) + (front ? rotation : -rotation) * 90 + 360) % 360;
+            Size previewSize = forced != null ? null : CameraPreviewFrames.choose(map.getOutputSizes(ImageFormat.YUV_420_888));
             if (previewSize != null) {
                 try { preview = new CameraPreviewFrames(previewSize, orientation, handler); preview.listen(previewListener); }
                 catch (RuntimeException e) { if (!recording) throw e; previewUnavailable(); }
@@ -132,10 +139,15 @@ final class CameraRecorder {
                     opening = false;
                     if (finished || closing) { device.close(); if (finished) thread.quitSafely(); return; }
                     camera = device;
-                    createSession();
+                    if (opened != null) opened.run(); else createSession();
                 }
                 public void onDisconnected(CameraDevice device) { opening = false; device.close(); if (finished) thread.quitSafely(); cameraStop("Camera disconnected"); }
-                public void onError(CameraDevice device, int error) { opening = false; device.close(); if (finished) thread.quitSafely(); cameraStop("Camera error " + error); }
+                public void onError(CameraDevice device, int error) {
+                    opening = false; device.close(); if (finished) thread.quitSafely();
+                    cameraStop((front ? "Front" : "Rear") + " camera: " +
+                        (error == ERROR_MAX_CAMERAS_IN_USE ? "firmware rejected simultaneous cameras" :
+                         error == ERROR_CAMERA_IN_USE ? "camera already in use" : "error " + error));
+                }
             }, handler);
             if (recording) handler.post(drain);
         } catch (Exception e) {
