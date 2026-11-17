@@ -71,6 +71,22 @@ final class CameraCatalog {
         }});
         return result;
     }
+    /** Widest rear route with a supported concurrent front camera. */
+    static Option[] concurrent(Context context) throws CameraAccessException {
+        if (Build.VERSION.SDK_INT < 30) throw new IllegalStateException("360 recording requires concurrent camera support (Android 11+)");
+        CameraManager manager = (CameraManager)context.getSystemService(Context.CAMERA_SERVICE);
+        for (Option rear : available(context)) {
+            for (String id : manager.getCameraIdList()) {
+                CameraCharacteristics c = manager.getCameraCharacteristics(id);
+                Integer facing = c.get(CameraCharacteristics.LENS_FACING);
+                if (facing == null || facing != CameraCharacteristics.LENS_FACING_FRONT || !usable(c)) continue;
+                for (Set<String> pair : manager.getConcurrentCameraIds())
+                    if (pair.contains(rear.openId) && pair.contains(id))
+                        return new Option[]{rear, new Option(id, null, c, 1f)};
+            }
+        }
+        throw new IllegalStateException("360 recording unavailable: no concurrent rear/front 1080p camera pair");
+    }
     private static boolean previewable(CameraCharacteristics c) {
         StreamConfigurationMap map = c.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
         return map != null && CameraPreviewFrames.choose(map.getOutputSizes(ImageFormat.YUV_420_888)) != null;

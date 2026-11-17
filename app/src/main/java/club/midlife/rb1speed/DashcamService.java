@@ -14,8 +14,13 @@ public final class DashcamService extends Service {
     static final String CHANGE_CAMERA = "club.midlife.rb1speed.CHANGE_CAMERA";
     private final Set<String> rejectedCameras = new HashSet<String>();
     private static volatile boolean running;
-    private static volatile long lastFrame;
-    private CameraRecorder recorder;
+    private static volatile long lastFrame, frontFrame;
+    private CameraRecorder recorder, frontRecorder;
+    private static volatile boolean dual;
+    private boolean recorderDual, frontStopping;
+    static boolean dual() { return dual; }
+    static final String START = "club.midlife.rb1speed.START_CAMERA";
+    static final String START_360 = "club.midlife.rb1speed.START_360";
     private volatile boolean switching, destroyed;
     private boolean recorderRecording, foreground, stopping;
     private CameraPreviewFrames.Listener previewListener;
@@ -38,7 +43,7 @@ public final class DashcamService extends Service {
     };
     static void report(Context context, String text) { context.getSharedPreferences("dashcam", 0).edit().putString("cameraStatus", text).apply(); }
     static boolean running() { return running; }
-    static boolean recording() { return running && DashcamPolicy.recordingFresh(lastFrame, SystemClock.elapsedRealtime()); }
+    static boolean recording() { return running && DashcamPolicy.recordingFresh(lastFrame, SystemClock.elapsedRealtime()) && (!dual || DashcamPolicy.recordingFresh(frontFrame, SystemClock.elapsedRealtime())); }
     static void maybeStart(Context context) {
         if (System.currentTimeMillis() < context.getSharedPreferences("dashcam", 0).getLong("cameraRetryAfter", 0)) return;
         if (running || !context.getSharedPreferences("dashcam", 0).getBoolean("enabled", false) ||
@@ -78,15 +83,22 @@ public final class DashcamService extends Service {
     }
     /** Always wait for the old camera to close before promoting a preview to recording. */
     private void reconcile() {
-        if (destroyed || switching) return;
+        if (destroyed || switching || frontStopping) return;
+        if (frontRecorder != null && (recorder == null || !running || !dual || switching || recorderDual != dual)) {
+            if (!frontStopping) { frontStopping = true; frontRecorder.stop("Switching camera mode"); }
+            return;
+        }
         if (recorder != null) {
-            if (recorderRecording != running || (!running && previewListener == null)) {
+            if (recorderDual != dual || recorderRecording != running || (!running && previewListener == null)) {
                 switching = true; stopping = true; recorder.stop("Switching camera mode");
             } else recorder.preview(previewListener);
             return;
         }
         if (!running && previewListener == null) { releaseForeground(); stopSelf(); return; }
-        recorderRecording = running;
+        final CameraCatalog.Option[] pair;
+        try { pair = running && dual ? CameraCatalog.concurrent(this) : null; }
+        catch (Exception e) { stopRecording(e.getMessage()); report(this, e.getMessage()); return; }
+        recorderRecording = running; recorderDual = dual; frontFrame = 0;
         if (running) {
             lastFrame = 0;
             getSharedPreferences("dashcam", 0).edit().putLong("recordingStarted", 0).apply();
@@ -120,6 +132,22 @@ public final class DashcamService extends Service {
                 if (wasRecording && previewListener != null) reconcile();
             }});
         }});
+        if (pair != null) {
+            recorder.select(pair[0], false);
+            frontRecorder = new CameraRecorder(this, true, new HashSet<String>(), new CameraRecorder.Listener() {
+                public void written() { if (!destroyed && running && !frontStopping) frontFrame = SystemClock.elapsedRealtime(); }
+                public void stopped(final String reason, String retryCamera) {
+                    main.post(new Runnable() { public void run() {
+                        frontRecorder = null;
+                        boolean expected = frontStopping; frontStopping = false;
+                        if (destroyed) return;
+                        if (expected) reconcile();
+                        else { report(DashcamService.this, "360 recording stopped: " + reason); stopRecording("360 recording stopped: " + reason); }
+                    }});
+                }
+            }).select(pair[1], true);
+            frontRecorder.start();
+        }
         recorder.preview(previewListener); recorder.start();
     }
     private void changeCamera() {
@@ -134,6 +162,7 @@ public final class DashcamService extends Service {
         if (!running && recorder == null) return;
         running = false; lastFrame = 0; main.removeCallbacks(unplugged); disconnectAt = -1;
         switching = false;
+        if (frontRecorder != null) { frontStopping = true; frontRecorder.stop(reason); }
         if (recorder != null) { stopping = true; recorder.stop(reason); }
         else { releaseForeground(); stopSelf(); }
     }
@@ -143,6 +172,10 @@ public final class DashcamService extends Service {
         } else if (intent != null && CHANGE_CAMERA.equals(intent.getAction())) {
             changeCamera();
         } else {
+            if (intent != null && (START.equals(intent.getAction()) || START_360.equals(intent.getAction()))) {
+                dual = START_360.equals(intent.getAction());
+                getSharedPreferences("dashcam", 0).edit().putBoolean("enabled", true).putString("cameraChoice", CameraCatalog.AUTO).apply();
+            } else if (!running) dual = false;
             if (!running) rejectedCameras.clear();
             foreground(); running = true;
             if (stopping) switching = true;
@@ -166,6 +199,7 @@ public final class DashcamService extends Service {
         destroyed = true; main.removeCallbacks(unplugged); unregisterReceiver(battery);
         if (Build.VERSION.SDK_INT >= 29 && thermal != null) power.removeThermalStatusListener(thermal);
         if (recorder != null) { recorder.preview(null); recorder.stop("Recording service stopped"); }
+        if (frontRecorder != null) frontRecorder.stop("Recording service stopped");
         previewListener = null; running = false; lastFrame = 0; releaseForeground();
         UploadJob.schedule(this, false); super.onDestroy();
     }

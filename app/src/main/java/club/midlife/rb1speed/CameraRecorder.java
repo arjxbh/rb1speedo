@@ -25,6 +25,8 @@ final class CameraRecorder {
     private final boolean recording;
     private final Set<String> rejected;
     private CameraCatalog.Option selected;
+    private CameraCatalog.Option forced;
+    private boolean front;
     private boolean automatic, cameraFailure;
     private CameraPreviewFrames preview;
     private volatile CameraPreviewFrames.Listener previewListener;
@@ -45,6 +47,7 @@ final class CameraRecorder {
     CameraRecorder(Context context, boolean recording, Set<String> rejected, Listener listener) {
         this.context = context; this.recording = recording; this.rejected = rejected; this.listener = listener; store = ClipStore.get(context);
     }
+    CameraRecorder select(CameraCatalog.Option option, boolean front) { this.forced = option; this.front = front; return this; }
     void preview(CameraPreviewFrames.Listener listener) {
         previewListener = listener;
         if (handler != null) handler.post(new Runnable() { public void run() {
@@ -78,10 +81,11 @@ final class CameraRecorder {
                 for (CameraCatalog.Option option : options) if (option.key.equals(preference)) present = true;
                 automatic = !present;
             }
-            selected = CameraCatalog.choose(options, preference, rejected);
+            selected = forced != null ? forced : CameraCatalog.choose(options, preference, rejected);
+            if (forced != null) automatic = false;
             if (selected == null) throw new IllegalStateException("No compatible rear camera available; choose a camera in Settings");
             CameraCharacteristics chosen = selected.characteristics;
-            context.getSharedPreferences("dashcam", 0).edit().putString("activeCamera", selected.label())
+            if (!front) context.getSharedPreferences("dashcam", 0).edit().putString("activeCamera", selected.label())
                 .putString("cameraSelectionStatus", automatic && !CameraCatalog.AUTO.equals(preference) ? "Saved camera unavailable; using widest available" :
                     automatic && !rejected.isEmpty() ? "Automatic · next widest; unavailable cameras skipped" : automatic ? "Automatic · widest available" : "Manual selection").apply();
             StreamConfigurationMap map = chosen.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
@@ -219,7 +223,7 @@ final class CameraRecorder {
         if (closing && mux == null) return;
         boolean keyframe = (info.flags & MediaCodec.BUFFER_FLAG_KEY_FRAME) != 0;
         if (origin < 0) { if (!keyframe) return; origin = info.presentationTimeUs; wall = System.currentTimeMillis();
-            DashcamService.report(context, "Recording rear camera · 1080p / H.264");
+            if (!front) DashcamService.report(context, DashcamService.dual() ? "Recording rear + front cameras · 1080p / H.264" : "Recording rear camera · 1080p / H.264");
             context.getSharedPreferences("dashcam", 0).edit().putLong("recordingStarted", wall).apply(); }
         long pts = info.presentationTimeUs;
         if (mux == null) {

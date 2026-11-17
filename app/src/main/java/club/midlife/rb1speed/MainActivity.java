@@ -289,7 +289,13 @@ public class MainActivity extends Activity implements LocationListener {
         return demo ? 58 + 22 * Math.sin((now - demoStart) / 5000.0) : reading.mph();
     }
     @Override public void onRequestPermissionsResult(int request, String[] permissions, int[] results) {
-        super.onRequestPermissionsResult(request, permissions, results); if (active && !demo) startGps();
+        super.onRequestPermissionsResult(request, permissions, results);
+        if (request == 81) {
+            if (results.length > 0 && results[0] == PackageManager.PERMISSION_GRANTED && pendingCameraAction != null) startDashcam(pendingCameraAction);
+            pendingCameraAction = null;
+            return;
+        }
+        if (active && !demo) startGps();
     }
     @Override public void onLocationChanged(Location location) {
         if (location.hasAccuracy() && location.getAccuracy() <= 1000) daylightLocation = new Location(location);
@@ -394,14 +400,35 @@ public class MainActivity extends Activity implements LocationListener {
         panel.addView(gpsButton,gpsParams);
         LinearLayout controls=row();
         recordingText = label(13, 0xffa9bacb);
+        recordingText.setOnClickListener(new View.OnClickListener() { public void onClick(View view) {
+            Toast.makeText(MainActivity.this, getSharedPreferences("dashcam", 0).getString("cameraStatus", "Camera off"), Toast.LENGTH_LONG).show();
+        }});
         controls.addView(recordingText, new LinearLayout.LayoutParams(0, dp(48), 1));
         demoButton=button("Demo",new View.OnClickListener() { public void onClick(View view) { toggleDemo(); }});
         controls.addView(demoButton,weightedButton());
         panel.addView(controls,new LinearLayout.LayoutParams(-1,dp(56)));
+        LinearLayout cameraControls = row();
+        Button rear = button("Start recording", new View.OnClickListener() { public void onClick(View view) { startDashcam(DashcamService.START); }});
+        Button both = button("Start 360 recording", new View.OnClickListener() { public void onClick(View view) { startDashcam(DashcamService.START_360); }});
+        Button stop = button("Stop recording", new View.OnClickListener() { public void onClick(View view) {
+            getSharedPreferences("dashcam", 0).edit().putBoolean("enabled", false).apply();
+            startService(new Intent(MainActivity.this, DashcamService.class).setAction(DashcamService.STOP));
+        }});
+        for (Button control : new Button[]{rear, both, stop}) { control.setTextSize(11); cameraControls.addView(control, weightedButton()); }
+        panel.addView(cameraControls, new LinearLayout.LayoutParams(-1, dp(56)));
         footerText=label(11,0xff8a9dad); footerText.setMaxLines(2);
         panel.addView(footerText,new LinearLayout.LayoutParams(-1,dp(28)));
         setContentView(dashboard); dashboard.requestApplyInsets();
         refreshDashboard(SystemClock.elapsedRealtime());
+    }
+    private String pendingCameraAction;
+    private void startDashcam(String action) {
+        if (checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+            pendingCameraAction = action;
+            requestPermissions(new String[]{Manifest.permission.CAMERA}, 81);
+            return;
+        }
+        startForegroundService(new Intent(this, DashcamService.class).setAction(action));
     }
     private void refreshDashboard(long now) {
         boolean fresh=reading.fresh(now), valid=demo||fresh;
@@ -412,7 +439,7 @@ public class MainActivity extends Activity implements LocationListener {
         settingsButton.setVisibility(driveSession.controlsVisible() ? View.VISIBLE : View.INVISIBLE);
         if (!driveSession.controlsVisible() && settingsDialog != null) settingsDialog.dismiss();
         boolean recording = DashcamService.recording();
-        setText(recordingText, recording ? "● REC" : DashcamService.running() ? "○ Starting camera" : "○ Camera off");
+        setText(recordingText, recording ? (DashcamService.dual() ? "● REC 360" : "● REC") : DashcamService.running() ? "○ Starting camera" : "○ Camera off");
         recordingText.setTextColor(recording ? 0xffff6868 : 0xffa9bacb);
         recordingText.setContentDescription(recording ? "Dashcam recording" : DashcamService.running() ? "Dashcam starting or waiting for video" : "Dashcam not recording");
         int ink=skin == DashboardSkin.INTEGRA ? 0xfff0eee4 : skin.ink;

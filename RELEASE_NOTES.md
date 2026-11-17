@@ -1,3 +1,12 @@
+Dashboard recording controls (1.6.4).
+
+- Add Start recording, Start 360 recording and Stop recording buttons to the active dashboard.
+- Start recording selects the widest compatible rear camera. Existing enabled/external-power automatic-start logic continues to start rear-only recording.
+- Start 360 recording saves separate rear and front 1080p/H.264 streams on Android 11+ devices exposing a compatible concurrent camera pair. Unsupported configurations stop with a camera status message; tap the recording indicator for details.
+- Show REC 360 only while both streams are writing fresh video. Stop recording closes both streams and disables automatic restart until recording is enabled again.
+- Preserve saved manual lens selection for settings and preview; dashboard start buttons return to Auto.
+- Native build, six test suites, APK alignment and signature verification passed. Concurrent recording and dashboard layout still require physical-device acceptance. No AWS deployment or new permissions are required.
+
 Automatic widest rear camera (1.6.3).
 
 - Default to the widest Android-exposed rear camera compatible with 1080p/30 recording, using sensor size and focal length rather than camera ID order. Support physical lenses behind logical cameras and supported logical zoom-out ranges.
