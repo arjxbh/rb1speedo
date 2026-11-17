@@ -208,6 +208,7 @@ public class MainActivity extends Activity implements LocationListener {
         updateBrightness();
         audio.resume(false); greetOnce(); startGps(); handler.post(ticker);
         DashcamService.maybeStart(this); UploadJob.schedule(this, false);
+        ClipAssembler.enqueue(this, true);
     }
     @Override public void onPause() {
         active = false; handler.removeCallbacks(ticker); audio.pause();

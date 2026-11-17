@@ -1,3 +1,10 @@
+# Version 1.6.2 — Google Photos playback
+
+- Native build, all five model suites, alignment and existing-key v2/v3 signing passed. Android version 1.6.2 / code 14, with no permission or AWS changes.
+- Added `./scripts/test-gallery.sh` for real Android 10+ MediaStore integration checks. On the Android 15 emulator, a generated valid H.264 MP4 passed schema-1 migration/backfill, visible completed row and readable encoded frames, private-plus-public quota accounting, duplicate prevention, abandoned partial-row recovery, expired pending-row retry, published owner-deletion handling, leased/protected retention, loop overwrite and manual two-copy deletion.
+- The test uses an isolated database, directory and preferences and removes its media rows. It does not require a hardware camera or change real clip metadata. The final source build and integration rerun passed.
+- Photos itself and an Android 10/12 handset still require acceptance: update over 1.6.1, open RB1 to backfill existing READY clips, check Movies/RB1 Speed in Photos device folders, play a complete clip, verify the gallery status if space is insufficient, and confirm user folder-backup preferences. Android 8–9 keeps the existing in-app playback/share path without new storage permissions.
+
 # Version 1.6.1 — settings, recording status and aiming preview
 
 - Native Android build, five model suites (speed, driving features, brightness, dashcam policy and preview pixels), APK alignment and existing-key v2/v3 signatures passed. Version 1.6.1 / code 13; no new permissions.

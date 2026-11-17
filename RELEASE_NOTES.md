@@ -1,3 +1,10 @@
+Google Photos playback (1.6.2).
+
+- Publish completed MP4 clips to Movies/RB1 Speed on Android 10+, visible in Google Photos under Collections → On this device. Backfill existing completed clips when the app opens.
+- Hide incomplete copies until publication finishes and recover interrupted publication without duplicate videos.
+- Preserve private upload originals; include both copies in the loop quota and remove both during loop overwrite or manual local deletion. Protected incidents remain protected from automatic overwrite.
+- Respect gallery copies deleted by the owner. Google Photos backup stays under the owner’s Photos settings. No new permissions or AWS deployment are required. Android 8–9 retains in-app playback and sharing.
+
 Settings and camera aiming (1.6.1).
 
 - Group Skins, Camera & clips, Debug and Updates under Settings, with a direct Aim camera preview entry. Settings and Demo hide after ten continuous seconds of reliable live GPS movement above 1 mph; simulation does not count. Returning to the dashboard restores them.

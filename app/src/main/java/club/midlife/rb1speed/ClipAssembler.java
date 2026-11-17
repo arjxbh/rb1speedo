@@ -11,7 +11,8 @@ import org.json.JSONObject;
 /** Copies encoded samples; no decode/re-encode, network, or UI-thread disk work. */
 final class ClipAssembler {
     private static final ExecutorService work = Executors.newSingleThreadExecutor();
-    static void enqueue(final Context context, final boolean recover) {
+    static void enqueue(Context caller, final boolean recover) {
+        final Context context = caller.getApplicationContext();
         work.execute(new Runnable() { public void run() {
             ClipStore store = ClipStore.get(context);
             if (recover) store.recover();
@@ -20,6 +21,23 @@ final class ClipAssembler {
                 try { assemble(store, id); }
                 catch (Exception e) { DashcamService.report(context, "Clip assembly paused: " + e.getClass().getSimpleName()); }
                 finally { store.release(id); }
+            }
+            if (ClipGallery.supported()) {
+                boolean complete = true;
+                for (JSONObject c : store.clips()) if ("READY".equals(c.optString("state"))) {
+                    String id = c.optString("id"); if (!store.lease(id)) { complete = false; continue; }
+                    try {
+                        if (ClipGallery.needsCopy(context, c) && !store.makeSpace(c.optLong("bytes")))
+                            throw new java.io.IOException("Gallery copy waiting for loop space or free-space reserve");
+                        ClipGallery.publish(context, store, c);
+                    }
+                    catch (Exception e) {
+                        complete = false;
+                        String reason = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
+                        context.getSharedPreferences("dashcam", 0).edit().putString("galleryStatus", "Gallery copy waiting: " + reason.substring(0, Math.min(200, reason.length())) + ". Originals remain available in Camera & clips.").apply();
+                    } finally { store.release(id); }
+                }
+                if (complete) context.getSharedPreferences("dashcam", 0).edit().putString("galleryStatus", "Completed clips: Movies/RB1 Speed · Google Photos → Collections → On this device").apply();
             }
             UploadJob.schedule(context, false);
         }});

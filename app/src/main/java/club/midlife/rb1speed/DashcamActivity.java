@@ -145,6 +145,7 @@ public final class DashcamActivity extends Activity {
         if (Build.VERSION.SDK_INT >= 33) registerReceiver(powerReceiver, new IntentFilter(Intent.ACTION_BATTERY_CHANGED), Context.RECEIVER_NOT_EXPORTED);
         else registerReceiver(powerReceiver, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
         DashcamService.maybeStart(this);
+        ClipAssembler.enqueue(this, true);
         updatePreview();
     }
     @Override public void onPause() {
@@ -207,6 +208,8 @@ public final class DashcamActivity extends Activity {
             String.format(Locale.US, "\nLocal use: %.2f / %.0f GiB · free %.2f GiB\nClips: %d · pending %.2f GiB · protected %.2f GiB",
                 store.usedBytes() / 1073741824.0, p.getLong("quota", DashcamPolicy.QUOTA_BYTES) / 1073741824.0, store.directory.getUsableSpace() / 1073741824.0, count, pending / 1073741824.0, saved / 1073741824.0) +
             "\nAwaiting verified cloud protection: " + protectionPending +
+            "\nGallery: " + (ClipGallery.supported() ? p.getString("galleryStatus", "Completed clips will appear in Movies/RB1 Speed") : "Android 10+ required; use Play or Share MP4 here") +
+            "\nLoop use includes private originals and gallery copies." +
             String.format(Locale.US, "\nBattery: %d%% · %.1f°C", percent, temperature) +
             "\nOverwritten before upload: " + p.getLong("overwritten", 0) +
             "\nOldest pending: " + (oldest == Long.MAX_VALUE ? "none" : new Date(oldest).toString()) +
@@ -246,7 +249,7 @@ public final class DashcamActivity extends Activity {
                     }
                     final boolean remove = which == 3;
                     new AlertDialog.Builder(DashcamActivity.this).setMessage(remove ?
-                        "Delete this local file? Any verified cloud copy remains. A clip that has not uploaded will be lost." :
+                        "Delete the local original and its Photos/gallery copy? Any verified S3 copy remains. A clip that has not uploaded will be lost." :
                         "Allow loop recording to overwrite this local clip? Any protected S3 copy remains protected.")
                         .setPositiveButton(remove ? "Delete local file" : "Allow overwrite", new DialogInterface.OnClickListener() {
                             public void onClick(DialogInterface d, int choice) {

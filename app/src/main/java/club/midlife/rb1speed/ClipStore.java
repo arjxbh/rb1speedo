@@ -19,15 +19,31 @@ final class ClipStore extends SQLiteOpenHelper {
     private boolean recovered;
     private final Set<String> leased = new HashSet<String>();
     private ClipStore(Context context) {
-        super(context, "dashcam.db", null, 1); this.context = context;
-        directory = new File(context.getFilesDir(), "dashcam");
+        this(context, "dashcam.db", new File(context.getFilesDir(), "dashcam"));
+    }
+    ClipStore(Context context, String database, File directory) {
+        super(context, database, null, 2); this.context = context; this.directory = directory;
         if (!directory.isDirectory() && !directory.mkdirs()) throw new IllegalStateException("Cannot create recording directory");
     }
     @Override public void onCreate(SQLiteDatabase db) {
-        db.execSQL("CREATE TABLE clips (id TEXT PRIMARY KEY, started INTEGER, state TEXT, path TEXT, bytes INTEGER DEFAULT 0, protected INTEGER DEFAULT 0, verified INTEGER DEFAULT 0, remoteProtected INTEGER DEFAULT 0, hashes TEXT)");
+        db.execSQL("CREATE TABLE clips (id TEXT PRIMARY KEY, started INTEGER, state TEXT, path TEXT, bytes INTEGER DEFAULT 0, protected INTEGER DEFAULT 0, verified INTEGER DEFAULT 0, remoteProtected INTEGER DEFAULT 0, hashes TEXT, gallery TEXT, galleryReady INTEGER DEFAULT 0)");
         db.execSQL("CREATE TABLE fragments (id TEXT PRIMARY KEY, clip TEXT, path TEXT, duration INTEGER DEFAULT 0, ready INTEGER DEFAULT 0)");
     }
-    @Override public void onUpgrade(SQLiteDatabase db, int old, int next) { throw new IllegalStateException("Unsupported dashcam database upgrade"); }
+    @Override public void onUpgrade(SQLiteDatabase db, int old, int next) {
+        if (old == 1 && next == 2) {
+            db.execSQL("ALTER TABLE clips ADD COLUMN gallery TEXT");
+            db.execSQL("ALTER TABLE clips ADD COLUMN galleryReady INTEGER DEFAULT 0");
+        }
+        else throw new IllegalStateException("Unsupported dashcam database upgrade");
+    }
+    synchronized void gallery(String id, String uri) {
+        ContentValues v = new ContentValues(); v.put("gallery", uri); v.put("galleryReady", 0);
+        getWritableDatabase().update("clips", v, "id=?", new String[]{id});
+    }
+    synchronized void galleryReady(String id) {
+        ContentValues v = new ContentValues(); v.put("galleryReady", 1);
+        getWritableDatabase().update("clips", v, "id=?", new String[]{id});
+    }
     synchronized String beginClip(long started) {
         String id = UUID.randomUUID().toString(); ContentValues v = new ContentValues();
         v.put("id", id); v.put("started", started); v.put("state", "RECORDING");
@@ -117,27 +133,29 @@ final class ClipStore extends SQLiteOpenHelper {
         File[] files = directory.listFiles();
         if (files != null) for (File file : files) if (file.getName().endsWith(".assembling")) file.delete();
     }
-    synchronized boolean makeSpace() {
+    synchronized boolean makeSpace() { return makeSpace(0); }
+    synchronized boolean makeSpace(long incoming) {
         long quota = context.getSharedPreferences("dashcam", 0).getLong("quota", DashcamPolicy.QUOTA_BYTES);
         long used = usedBytes();
         List<JSONObject> candidates = rows("SELECT * FROM clips WHERE state='READY' AND protected=0 ORDER BY verified DESC, started ASC", null);
         for (JSONObject c : candidates) {
-            if (used < quota && directory.getUsableSpace() > DashcamPolicy.RESERVE_BYTES) return true;
+            if (used + incoming < quota && directory.getUsableSpace() > DashcamPolicy.RESERVE_BYTES + incoming) return true;
             String id = c.optString("id"); if (leased.contains(id)) continue;
+            if (!ClipGallery.delete(context, c.isNull("gallery") ? null : c.optString("gallery"))) continue;
             File file = new File(c.optString("path"));
-            if (file.exists() && !file.delete()) continue;
-            used -= c.optLong("bytes");
+            if (file.exists() && !file.delete()) { used = usedBytes(); continue; }
             if (c.optInt("verified") == 0) {
                 SharedPreferences p = context.getSharedPreferences("dashcam", 0);
                 p.edit().putLong("overwritten", p.getLong("overwritten", 0) + 1).commit();
             }
             getWritableDatabase().delete("clips", "id=?", new String[]{id}); deleteFragments(id);
+            used = usedBytes();
         }
-        return used < quota && directory.getUsableSpace() > DashcamPolicy.RESERVE_BYTES;
+        return used + incoming < quota && directory.getUsableSpace() > DashcamPolicy.RESERVE_BYTES + incoming;
     }
     synchronized long usedBytes() {
         long used = 0; File[] files = directory.listFiles();
-        if (files != null) for (File f : files) used += f.length(); return used;
+        if (files != null) for (File f : files) used += f.length(); return used + ClipGallery.usedBytes(context);
     }
     synchronized void allowOverwrite(String id) {
         ContentValues values = new ContentValues(); values.put("protected", 0);
@@ -146,6 +164,7 @@ final class ClipStore extends SQLiteOpenHelper {
     synchronized boolean deleteLocal(String id) {
         JSONObject c = clip(id);
         if (c == null || leased.contains(id) || !"READY".equals(c.optString("state"))) return false;
+        if (!ClipGallery.delete(context, c.isNull("gallery") ? null : c.optString("gallery"))) return false;
         File file = new File(c.optString("path"));
         if (file.exists() && !file.delete()) return false;
         getWritableDatabase().delete("clips", "id=?", new String[]{id}); deleteFragments(id); return true;
