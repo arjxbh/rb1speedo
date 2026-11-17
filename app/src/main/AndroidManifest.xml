@@ -17,6 +17,7 @@
         <intent><action android:name="android.intent.action.TTS_SERVICE" /></intent>
     </queries>
     <application android:label="RB1 Speed" android:theme="@android:style/Theme.Material.NoActionBar" android:icon="@drawable/icon" android:allowBackup="false" android:usesCleartextTraffic="false" android:supportsRtl="true">
+        <meta-data android:name="rb1.fullApp" android:value="true" />
         <service android:name=".DashcamService" android:exported="false" android:foregroundServiceType="camera" />
         <service android:name=".UploadJob" android:exported="true" android:permission="android.permission.BIND_JOB_SERVICE" />
         <provider android:name=".ClipProvider" android:authorities="club.midlife.rb1speed.clips" android:exported="false" android:grantUriPermissions="true" />

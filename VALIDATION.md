@@ -1,3 +1,11 @@
+# Version 1.6.8 — full snapcam application
+
+- Native build, six model suites, alignment and existing-certificate signing passed for the normal app and full `RB1-Speed-snapcam.apk`. The generated Wide manifest retains all activities/services/receiver, changes the application identity to `org.codeaurora.snapcam`, and uses a unique clip-provider authority. The launcher opens MainActivity instead of the old probe screen.
+- Emulator installation upgraded the existing snapcam lens probe to the full Wide app alongside the original. Full-app integration passed manifest component/metadata checks, original and Wide private-provider coexistence, reading/querying a temporary finalized clip through the Wide provider, dashboard Start/Flip/Stop controls, and full-app diagnostics ownership cleanup. Cross-package private provider registration is inspected through the test shell because Android intentionally hides it from the other app’s PackageManager.
+- Wide-target emulator suites also passed real rear/front preview handoffs, metadata/ID/preview diagnostics with cancellation and saved reports, and the existing generated-H.264 MediaStore publish/playback/ownership/cleanup checks.
+- Device acceptance remains: stop recording in the original app; install Wide over the snapcam probe; grant permissions and start recording; confirm Auto selects rear camera 3, inspect the finalized ultrawide clip in Photos, flip front/back and inspect orientation, then check power reconnection and a longer thermal run. Camera 3 metadata and visible preview were supplied from HD1925_11_F.05; continuous full-app ultrawide recording is not yet validated.
+- Original settings/pairing/private footage remain in the original app. Wide settings, pairing and private footage are separate. No data migration or AWS deployment.
+
 # Version 1.6.7 — single-camera flipping and ultrawide discovery
 
 - Native build, six remaining model suites, APK alignment, and existing-certificate signatures passed. Removed dual-camera recorder orchestration, dual/Camera1/split-screen diagnostic paths, and obsolete split-screen pixel tests.

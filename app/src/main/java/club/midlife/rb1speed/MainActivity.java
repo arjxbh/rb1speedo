@@ -284,7 +284,7 @@ public class MainActivity extends Activity implements LocationListener {
     }
     private void openUpdates() {
         try {
-            startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/arjxbh/rb1speedo/releases/latest")));
+            startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/arjxbh/rb1speedo/releases/latest/download/" + (getPackageName().equals("org.codeaurora.snapcam") ? "RB1-Speed-snapcam.apk" : "RB1-Speed.apk"))));
         } catch (ActivityNotFoundException e) {
             Toast.makeText(this, "Open github.com/arjxbh/rb1speedo/releases in a browser for updates", Toast.LENGTH_LONG).show();
         }

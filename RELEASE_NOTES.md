@@ -1,3 +1,11 @@
+Full snapcam app for OnePlus auxiliary lenses (1.6.8).
+
+- On OnePlus HD1925, install RB1-Speed-snapcam.apk and open RB1 Speed · Wide. This is the full speedometer/dashcam app under org.codeaurora.snapcam, the package identity confirmed to expose the phone’s rear ultrawide camera 3. Auto should choose camera 3 using the existing widest compatible rear-lens ranking; camera IDs are not hardcoded.
+- The Wide APK upgrades the old snapcam lens probe and coexists with the original RB1-Speed.apk. Stop recording in the original first. Preferences, permissions, pairing and private footage are separate; enable recording in Wide. Original app data is not migrated or removed.
+- Retain all activities, recording/upload services, power receiver, camera flip, clip playback/sharing and lens debugging. Use a distinct clip-provider authority and explicit full-app metadata so Debug pauses Wide’s own recorder. Updates downloads the APK matching the installed variant.
+- Release the normal and Wide APKs with checksums. Standalone lens helpers remain available in v1.6.7/source but are not included in this release to avoid confusing them with the full Wide app.
+- Camera 3 metadata advertises 1080p and 30 fps, and its ultrawide preview has been confirmed on HD1925_11_F.05. Actual full-app ultrawide recording, saved clip playback, orientation and a longer thermal/power test still require phone acceptance. No AWS deployment.
+
 Camera flipping and ultrawide lens debugging (1.6.7).
 
 - Replace Start 360 recording with Flip camera. One camera records at a time; switching closes the current clip before opening the other camera. While stopped, Flip selects the next manual camera without starting recording. Automatic starts default to rear.

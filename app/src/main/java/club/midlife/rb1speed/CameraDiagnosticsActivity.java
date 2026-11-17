@@ -19,7 +19,12 @@ public final class CameraDiagnosticsActivity extends Activity {
     private List<CameraCatalog.Option> lenses=new ArrayList<CameraCatalog.Option>();
     private Button previewButton;
     AlertDialog lensDialog;
-    private boolean standalone() { return !getPackageName().equals("club.midlife.rb1speed"); }
+    private boolean standalone() {
+        try {
+            Bundle metadata=getPackageManager().getApplicationInfo(getPackageName(),PackageManager.GET_META_DATA).metaData;
+            return metadata==null || !metadata.getBoolean("rb1.fullApp",false);
+        } catch(PackageManager.NameNotFoundException e) { return true; }
+    }
     private CameraDiagnostics diagnostics;
     private String pending;
     private String report;
