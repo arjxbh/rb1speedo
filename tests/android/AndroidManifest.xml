@@ -2,5 +2,6 @@
     <uses-sdk android:minSdkVersion="29" android:targetSdkVersion="35" />
     <application android:label="RB1 gallery integration checks" />
     <instrumentation android:name="club.midlife.rb1speed.GalleryInstrumentation" android:targetPackage="club.midlife.rb1speed" />
+    <instrumentation android:name="club.midlife.rb1speed.CameraDiagnosticsInstrumentation" android:targetPackage="club.midlife.rb1speed" />
     <instrumentation android:name="club.midlife.rb1speed.CameraChoiceInstrumentation" android:targetPackage="club.midlife.rb1speed" />
 </manifest>

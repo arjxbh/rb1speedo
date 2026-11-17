@@ -1,3 +1,11 @@
+Manual camera diagnostics (1.6.6).
+
+- Add Settings → Debug → Camera diagnostics with individually selectable capability scan, single-camera recording baseline, open-only pairs, dual YUV capture, two independent encoders, one split-screen encoder, and legacy Camera1 preview tests.
+- Exercise every directly exposed rear/front pair in both opening orders. Frame and independent-encoder tests try supported 1080p, 720p and 480p configurations; split-screen and Camera1 tests use 480p inputs. Capture tests run for three seconds per configuration with bounded Camera2 setup timeouts and cancellation.
+- Report camera/build metadata, logical physical-camera IDs, supported sizes/FPS, advertised concurrent pairs, attached USB interfaces, exact failure stages/codes, frame/sample counts and temporary MP4 sizes. Results persist across screen visits and can be copied.
+- Pause regular dashcam recording while diagnostics is visible, preserve enabled/lens/retry preferences, and release diagnostic cameras when leaving. Test footage is private cache data, deleted after each probe and never uploaded.
+- USB recording, CameraX/NDK rewrites, hidden vendor APIs, root and ROM changes are not implemented diagnostic methods; the screen states these limits explicitly. A three-second PASS does not establish long-term reliability or OnePlus firmware compatibility.
+
 Dual-camera startup compatibility (1.6.5).
 
 - Open both cameras before configuring either recording session, following the Camera2 concurrent startup order.

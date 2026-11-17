@@ -10,12 +10,16 @@ import java.util.Set;
 
 /** One camera owner: foreground loop recording, or a preview bound to a visible Activity. */
 public final class DashcamService extends Service {
+    static volatile boolean diagnosticsActive;
+    private static volatile DashcamService owner;
+    static final String PAUSE_DIAGNOSTICS = "club.midlife.rb1speed.PAUSE_DIAGNOSTICS";
+    static boolean diagnosticsBusy() { DashcamService service=owner; return service!=null && (service.recorder!=null || service.frontRecorder!=null); }
     static final String STOP = "club.midlife.rb1speed.STOP_CAMERA";
     static final String CHANGE_CAMERA = "club.midlife.rb1speed.CHANGE_CAMERA";
     private final Set<String> rejectedCameras = new HashSet<String>();
     private static volatile boolean running;
     private static volatile long lastFrame, frontFrame;
-    private CameraRecorder recorder, frontRecorder;
+    private volatile CameraRecorder recorder, frontRecorder;
     private static volatile boolean dual;
     private boolean recorderDual, frontStopping;
     private int camerasOpened;
@@ -46,6 +50,7 @@ public final class DashcamService extends Service {
     static boolean running() { return running; }
     static boolean recording() { return running && DashcamPolicy.recordingFresh(lastFrame, SystemClock.elapsedRealtime()) && (!dual || DashcamPolicy.recordingFresh(frontFrame, SystemClock.elapsedRealtime())); }
     static void maybeStart(Context context) {
+        if (diagnosticsActive) return;
         if (System.currentTimeMillis() < context.getSharedPreferences("dashcam", 0).getLong("cameraRetryAfter", 0)) return;
         if (running || !context.getSharedPreferences("dashcam", 0).getBoolean("enabled", false) ||
             context.checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) return;
@@ -55,7 +60,7 @@ public final class DashcamService extends Service {
         catch (RuntimeException e) { report(context, "Open Camera to resume recording: " + e.getClass().getSimpleName()); }
     }
     @Override public void onCreate() {
-        super.onCreate();
+        super.onCreate(); owner=this;
         power = (PowerManager)getSystemService(POWER_SERVICE);
         if (Build.VERSION.SDK_INT >= 29) {
             thermal = new PowerManager.OnThermalStatusChangedListener() { public void onThermalStatusChanged(int status) {
@@ -84,7 +89,7 @@ public final class DashcamService extends Service {
     }
     /** Always wait for the old camera to close before promoting a preview to recording. */
     private void reconcile() {
-        if (destroyed || switching || frontStopping) return;
+        if (destroyed || switching || frontStopping || diagnosticsActive) return;
         if (frontRecorder != null && (recorder == null || !running || !dual || switching || recorderDual != dual)) {
             if (!frontStopping) { frontStopping = true; frontRecorder.stop("Switching camera mode"); }
             return;
@@ -130,7 +135,8 @@ public final class DashcamService extends Service {
                 }
                 if (wasRecording) {
                     running = false; lastFrame = 0;
-                    getSharedPreferences("dashcam", 0).edit().putLong("cameraRetryAfter", reason.startsWith("Parked:") ? 0 : System.currentTimeMillis() + 60000).apply();
+                    if (!reason.equals("Paused for camera diagnostics"))
+                        getSharedPreferences("dashcam", 0).edit().putLong("cameraRetryAfter", reason.startsWith("Parked:") ? 0 : System.currentTimeMillis() + 60000).apply();
                     report(DashcamService.this, reason); releaseForeground(); UploadJob.schedule(DashcamService.this, false);
                 }
                 getSharedPreferences("dashcam", 0).edit().putString("previewStatus", reason).apply();
@@ -193,7 +199,14 @@ public final class DashcamService extends Service {
         else { releaseForeground(); stopSelf(); }
     }
     @Override public int onStartCommand(Intent intent, int flags, int id) {
-        if (intent != null && STOP.equals(intent.getAction())) {
+        if (intent != null && PAUSE_DIAGNOSTICS.equals(intent.getAction())) {
+            previewListener=null;
+            stopRecording("Paused for camera diagnostics");
+            if (recorder==null && frontRecorder==null) stopSelf();
+        } else if (diagnosticsActive) {
+            // A queued automatic foreground start must not compete with a diagnostic probe.
+            foreground(); releaseForeground(); stopRecording("Paused for camera diagnostics"); stopSelf();
+        } else if (intent != null && STOP.equals(intent.getAction())) {
             getSharedPreferences("dashcam", 0).edit().putBoolean("enabled", false).apply(); stopRecording("Stopped manually");
         } else if (intent != null && CHANGE_CAMERA.equals(intent.getAction())) {
             changeCamera();
@@ -232,6 +245,7 @@ public final class DashcamService extends Service {
     @Override public IBinder onBind(Intent intent) { return new PreviewBinder(); }
     @Override public boolean onUnbind(Intent intent) { previewListener = null; reconcile(); return false; }
     @Override public void onDestroy() {
+        if (owner==this) owner=null;
         destroyed = true; main.removeCallbacks(unplugged); unregisterReceiver(battery);
         if (Build.VERSION.SDK_INT >= 29 && thermal != null) power.removeThermalStatusListener(thermal);
         if (recorder != null) { recorder.preview(null); recorder.stop("Recording service stopped"); }

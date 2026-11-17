@@ -1,3 +1,11 @@
+# Version 1.6.6 — manual camera diagnostics
+
+- Native build, seven model suites, alignment, and existing-certificate APK signatures passed. Added deterministic tests for planar/semiplanar split-screen chroma layout, multiple chroma rows, input validation, and source preservation.
+- Android 15 emulator with front/back emulated cameras: `./scripts/test-android.sh CameraDiagnosticsInstrumentation` passed capability/USB inventory, open-only probes, single-camera H.264 MP4 output, and terminal outcomes for the full dual-YUV, independent-encoder, split-screen-encoder, and Camera1 matrices. Unsupported combinations may correctly report FAIL/SKIP; integration success verifies the diagnostic runner, not that every combination works.
+- Integration checks also cover Stop, temporary MP4 deletion, preserving enabled/lens/retry preferences, leaving during asynchronous camera opening, diagnostic ownership release, and report persistence after reopening. Camera1 textures are consumed on an EGL context so an unconsumed preview queue does not cause false frame-stall reports.
+- OnePlus HD1925_11_F.05 acceptance: run Scan capabilities, Single-camera baseline, Open cameras only, Dual YUV frames, Two encoders, One split-screen encoder, then Camera1 preview. Copy the saved report. Physical dual-camera support, encoder throughput, long-run temperature, and firmware behavior remain unverified. USB recording and vendor/root/ROM changes are not implemented probes.
+- No new Android permissions or AWS deployment.
+
 # Version 1.6.3 — automatic widest camera and manual lens choice
 
 - Native build, six model suites, APK alignment and existing-certificate v2/v3 signing passed. Version 1.6.3 / code 15; no new permissions or AWS changes.

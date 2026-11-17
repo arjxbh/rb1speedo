@@ -4,7 +4,8 @@ cd "$(dirname "$0")/.."
 case "${1:-GalleryInstrumentation}" in
     GalleryInstrumentation) RUNNER=GalleryInstrumentation; SUCCESS='Gallery integration: all checks passed' ;;
     CameraChoiceInstrumentation) RUNNER=CameraChoiceInstrumentation; SUCCESS='Camera selection integration: all checks passed' ;;
-    *) echo 'Choose GalleryInstrumentation or CameraChoiceInstrumentation' >&2; exit 2 ;;
+    CameraDiagnosticsInstrumentation) RUNNER=CameraDiagnosticsInstrumentation; SUCCESS='Camera diagnostics integration: all checks passed' ;;
+    *) echo 'Choose GalleryInstrumentation, CameraChoiceInstrumentation or CameraDiagnosticsInstrumentation' >&2; exit 2 ;;
 esac
 ./build.sh
 export JAVA_HOME="$PWD/.tools/jdk"

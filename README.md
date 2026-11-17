@@ -129,3 +129,11 @@ The included development signing key is for this personal prototype, not a produ
 `tests/SpeedReadingTest.java` checks mph conversion, zero speed, missing speed, accuracy rejection, invalid numbers, stale and out-of-order timestamps, and reset independently of Android. Real-world GPS behavior still needs verification on your phone.
 
 `tests/DrivingFeaturesTest.java` checks the demo visibility timer, stops and GPS/timer gaps, warning threshold/hysteresis/repeat timing, expiry and session reset, and synthesized chime duration/envelope. Both suites run in local and GitHub native builds. Future tasks are tracked in [GitHub Issues](https://github.com/arjxbh/rb1speedo/issues).
+
+### Camera diagnostics
+
+While parked, open **Settings → Debug → Camera diagnostics**. Start with **Scan capabilities**, **Single-camera baseline**, then **Open cameras only**. Other buttons test dual YUV frames, two encoders, one split-screen encoder, and legacy Camera1 previews. Each tests all directly exposed rear/front pairs in both opening orders. YUV and independent encoding try supported 1080p/720p/480p sizes; split-screen uses two 640×480 inputs and one 1280×480 encoder. Camera1 tests preview only.
+
+Normal dashcam recording pauses while this screen is open. Camera2 setup has a 12-second timeout; successful capture runs for three seconds per configuration. **Stop tests** cancels the queue. Leaving closes the test cameras; normal automatic-start conditions apply when returning to the dashboard. Temporary MP4s stay in private cache, are deleted after each probe, and are not uploaded or published to Photos. **Copy results** copies a persistent report with the device/build, test configuration, failure stage/code, and frame/encoded sample counts. It contains no test footage.
+
+The scan lists USB devices and logical-camera groups. It does not record external USB cameras, invoke privileged vendor features, modify firmware, or run separate CameraX/NDK implementations. Short test success needs follow-up device testing before enabling a configuration for continuous dashcam use.

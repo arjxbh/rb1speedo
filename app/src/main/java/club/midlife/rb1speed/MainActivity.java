@@ -138,6 +138,9 @@ public class MainActivity extends Activity implements LocationListener {
         debugText = label(14, 0xffe4edf7); debugText.setGravity(Gravity.START);
         debugText.setTextIsSelectable(true);
         content.addView(debugText, new LinearLayout.LayoutParams(-1, -2));
+        content.addView(button("Camera diagnostics", new View.OnClickListener() {
+            public void onClick(View view) { startActivity(new Intent(MainActivity.this, CameraDiagnosticsActivity.class)); }
+        }), new LinearLayout.LayoutParams(-1, dp(48)));
         content.addView(button("Apply 70% media volume", new View.OnClickListener() {
             public void onClick(View view) { audio.setLaunchVolume(); refreshDebug(); }
         }), new LinearLayout.LayoutParams(-1, dp(48)));
@@ -208,6 +211,7 @@ public class MainActivity extends Activity implements LocationListener {
         updateBrightness();
         audio.resume(false); greetOnce(); startGps(); handler.post(ticker);
         DashcamService.maybeStart(this); UploadJob.schedule(this, false);
+        handler.postDelayed(new Runnable() { public void run() { if (active) DashcamService.maybeStart(MainActivity.this); }}, 1000);
         ClipAssembler.enqueue(this, true);
     }
     @Override public void onPause() {
