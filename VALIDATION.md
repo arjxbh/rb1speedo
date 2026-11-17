@@ -1,3 +1,12 @@
+# Version 1.6.3 — automatic widest camera and manual lens choice
+
+- Native build, six model suites, APK alignment and existing-certificate v2/v3 signing passed. Version 1.6.3 / code 15; no new permissions or AWS changes.
+- Camera-lens model checks cover different sensor sizes, 16:9 cropping, zoom-out, invalid/missing metadata, Auto widest choice, manual override, missing saved lenses, failed-route exclusions, deterministic fallback and exhaustion.
+- Android 15 emulator: Settings/camera setup navigation, lens selector empty state when no 1080p/30 route is exposed, live aiming with the selected rear camera, hide/close, portrait/landscape layout and dashboard return passed. Screenshots were inspected. Both basic and virtual-scene emulator cameras lack the required 1920×1080 output, so the selector correctly offers only Auto there while preview still works.
+- `./scripts/test-camera.sh` passed real Camera2/service integration: saved manual preference follows the available preview camera, survives Activity/service teardown, and explicit camera reconfiguration returns to Auto with fresh frames and without enabling recording. A test-selected preview route is used because the emulator cannot supply a recording-compatible route; this does not validate a manual recording-row UI choice or physical multi-camera hardware routing.
+- Shared test-runner shell syntax passed, and the existing gallery integration passed from the same instrumentation APK.
+- OnePlus acceptance remains: confirm all exposed rear lenses appear, compare Auto’s view with the widest available lens, choose each compatible manual camera, verify preview and recorded MP4 match, switch during recording and play both finalized clips around the brief handoff gap, then restart the app and check preference persistence. Also check actual ultrawide 1080p/30, physical stream routing and fallback behavior on that firmware. Some manufacturers restrict third-party auxiliary cameras; no unsupported camera is claimed available.
+
 # Version 1.6.2 — Google Photos playback
 
 - Native build, all five model suites, alignment and existing-key v2/v3 signing passed. Android version 1.6.2 / code 14, with no permission or AWS changes.

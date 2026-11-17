@@ -4,6 +4,7 @@ import android.content.Context;
 import android.graphics.ImageFormat;
 import android.hardware.camera2.*;
 import android.hardware.camera2.params.StreamConfigurationMap;
+import android.hardware.camera2.params.OutputConfiguration;
 import android.media.*;
 import android.os.*;
 import android.util.Range;
@@ -11,15 +12,20 @@ import android.util.Size;
 import android.view.*;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.List;
+import java.util.Set;
 import java.io.File;
 
 /** One continuous hardware encoder, with MP4 fragments cut only at sync frames. */
 final class CameraRecorder {
-    interface Listener { void stopped(String reason); void written(); }
+    interface Listener { void stopped(String reason, String retryCamera); void written(); }
     private final Context context;
     private final ClipStore store;
     private final Listener listener;
     private final boolean recording;
+    private final Set<String> rejected;
+    private CameraCatalog.Option selected;
+    private boolean automatic, cameraFailure;
     private CameraPreviewFrames preview;
     private volatile CameraPreviewFrames.Listener previewListener;
     private final HandlerThread thread = new HandlerThread("dashcam-camera");
@@ -36,8 +42,8 @@ final class CameraRecorder {
     private boolean closing, finished, started, opening;
     private Range<Integer> frameRange;
     private boolean continuousFocus;
-    CameraRecorder(Context context, boolean recording, Listener listener) {
-        this.context = context; this.recording = recording; this.listener = listener; store = ClipStore.get(context);
+    CameraRecorder(Context context, boolean recording, Set<String> rejected, Listener listener) {
+        this.context = context; this.recording = recording; this.rejected = rejected; this.listener = listener; store = ClipStore.get(context);
     }
     void preview(CameraPreviewFrames.Listener listener) {
         previewListener = listener;
@@ -63,18 +69,28 @@ final class CameraRecorder {
                 throw new IllegalStateException("Device thermal protection active");
             if (recording && !store.makeSpace()) throw new IllegalStateException("Storage quota or free-space reserve reached");
             CameraManager manager = (CameraManager)context.getSystemService(Context.CAMERA_SERVICE);
-            String selected = null; CameraCharacteristics chosen = null;
-            for (String id : manager.getCameraIdList()) {
-                CameraCharacteristics c = manager.getCameraCharacteristics(id);
-                if (c.get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_BACK) { selected = id; chosen = c; break; }
+            List<CameraCatalog.Option> options = CameraCatalog.available(context);
+            if (!recording && options.isEmpty()) options = CameraCatalog.available(context, false);
+            String preference = CameraCatalog.preference(context);
+            automatic = CameraCatalog.AUTO.equals(preference);
+            if (!automatic) {
+                boolean present = false;
+                for (CameraCatalog.Option option : options) if (option.key.equals(preference)) present = true;
+                automatic = !present;
             }
-            if (selected == null) throw new IllegalStateException("Rear camera unavailable");
+            selected = CameraCatalog.choose(options, preference, rejected);
+            if (selected == null) throw new IllegalStateException("No compatible rear camera available; choose a camera in Settings");
+            CameraCharacteristics chosen = selected.characteristics;
+            context.getSharedPreferences("dashcam", 0).edit().putString("activeCamera", selected.label())
+                .putString("cameraSelectionStatus", automatic && !CameraCatalog.AUTO.equals(preference) ? "Saved camera unavailable; using widest available" :
+                    automatic && !rejected.isEmpty() ? "Automatic · next widest; unavailable cameras skipped" : automatic ? "Automatic · widest available" : "Manual selection").apply();
             StreamConfigurationMap map = chosen.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
             boolean supported = false;
             Size[] videoSizes = map.getOutputSizes(MediaCodec.class);
             if (videoSizes != null) for (Size size : videoSizes) if (size.getWidth() == 1920 && size.getHeight() == 1080) supported = true;
             if (recording && !supported) throw new IllegalStateException("Rear camera does not expose 1080p recording");
-            Range<Integer>[] ranges = chosen.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES);
+            CameraCharacteristics controls = selected.physicalId == null ? chosen : manager.getCameraCharacteristics(selected.openId);
+            Range<Integer>[] ranges = controls.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES);
             if (ranges != null) for (Range<Integer> range : ranges) {
                 if (range.contains(30) && (frameRange == null || range.getLower() > frameRange.getLower() ||
                     (range.getLower().equals(frameRange.getLower()) && range.getUpper() < frameRange.getUpper()))) frameRange = range;
@@ -82,6 +98,10 @@ final class CameraRecorder {
             if (recording && frameRange == null) throw new IllegalStateException("30 fps camera mode unavailable");
             int[] focusModes = chosen.get(CameraCharacteristics.CONTROL_AF_AVAILABLE_MODES);
             if (focusModes != null) for (int mode : focusModes) if (mode == CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO) continuousFocus = true;
+            if (selected.physicalId != null && continuousFocus) {
+                continuousFocus = false; int[] controlFocus = controls.get(CameraCharacteristics.CONTROL_AF_AVAILABLE_MODES);
+                if (controlFocus != null) for (int mode : controlFocus) if (mode == CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO) continuousFocus = true;
+            }
             int rotation = ((WindowManager)context.getSystemService(Context.WINDOW_SERVICE)).getDefaultDisplay().getRotation();
             orientation = (chosen.get(CameraCharacteristics.SENSOR_ORIENTATION) - rotation * 90 + 360) % 360;
             Size previewSize = CameraPreviewFrames.choose(map.getOutputSizes(ImageFormat.YUV_420_888));
@@ -103,40 +123,49 @@ final class CameraRecorder {
                 surface = encoder.createInputSurface(); encoder.start(); started = true; wall = System.currentTimeMillis();
             }
             opening = true;
-            manager.openCamera(selected, new CameraDevice.StateCallback() {
+            manager.openCamera(selected.openId, new CameraDevice.StateCallback() {
                 public void onOpened(CameraDevice device) {
                     opening = false;
                     if (finished || closing) { device.close(); if (finished) thread.quitSafely(); return; }
                     camera = device;
                     createSession();
                 }
-                public void onDisconnected(CameraDevice device) { opening = false; device.close(); if (finished) thread.quitSafely(); requestStop("Camera disconnected"); }
-                public void onError(CameraDevice device, int error) { opening = false; device.close(); if (finished) thread.quitSafely(); requestStop("Camera error " + error); }
+                public void onDisconnected(CameraDevice device) { opening = false; device.close(); if (finished) thread.quitSafely(); cameraStop("Camera disconnected"); }
+                public void onError(CameraDevice device, int error) { opening = false; device.close(); if (finished) thread.quitSafely(); cameraStop("Camera error " + error); }
             }, handler);
             if (recording) handler.post(drain);
-        } catch (Exception e) { opening = false; reason = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage(); finish(); }
+        } catch (Exception e) {
+            opening = false; cameraFailure = e instanceof CameraAccessException || (selected != null && e instanceof SecurityException);
+            reason = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage(); finish();
+        }
     }
     private void createSession() {
         try {
-            ArrayList<Surface> targets = new ArrayList<Surface>();
-            if (surface != null) targets.add(surface);
-            if (preview != null) targets.add(preview.surface());
-            camera.createCaptureSession(targets, new CameraCaptureSession.StateCallback() {
+            ArrayList<OutputConfiguration> targets = new ArrayList<OutputConfiguration>();
+            if (surface != null) targets.add(output(surface));
+            if (preview != null) targets.add(output(preview.surface()));
+            camera.createCaptureSessionByOutputConfigurations(targets, new CameraCaptureSession.StateCallback() {
                 public void onConfigured(CameraCaptureSession capture) {
                     if (finished || closing) { capture.close(); return; }
                     session = capture;
                     try {
                         repeat();
-                    } catch (Exception e) { if (!withoutPreview()) requestStop("Camera capture failed: " + e.getClass().getSimpleName()); }
+                    } catch (Exception e) { if (!withoutPreview()) cameraStop("Camera capture failed: " + e.getClass().getSimpleName()); }
                 }
                 public void onConfigureFailed(CameraCaptureSession capture) {
                     capture.close();
                     if (finished || closing) return;
-                    if (!withoutPreview()) requestStop("Camera configuration failed");
+                    if (!withoutPreview()) cameraStop("Camera configuration failed");
                 }
             }, handler);
-        } catch (Exception e) { if (!withoutPreview()) requestStop("Camera session failed: " + e.getClass().getSimpleName()); }
+        } catch (Exception e) { if (!withoutPreview()) cameraStop("Camera session failed: " + e.getClass().getSimpleName()); }
     }
+    private OutputConfiguration output(Surface surface) {
+        OutputConfiguration configuration = new OutputConfiguration(surface);
+        if (Build.VERSION.SDK_INT >= 28 && selected.physicalId != null) configuration.setPhysicalCameraId(selected.physicalId);
+        return configuration;
+    }
+    private void cameraStop(String why) { if (!finished && !closing) { cameraFailure = true; requestStop(why); } }
     private void previewUnavailable() {
         context.getSharedPreferences("dashcam", 0).edit().putString("previewStatus", "Preview unavailable on this camera configuration; recording can continue").apply();
     }
@@ -150,6 +179,13 @@ final class CameraRecorder {
         if (surface != null) request.addTarget(surface);
         if (preview != null && (!recording || previewListener != null)) request.addTarget(preview.surface());
         request.set(CaptureRequest.CONTROL_MODE, CaptureRequest.CONTROL_MODE_AUTO);
+        request.set(CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE, CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE_OFF);
+        if (selected.physicalId == null) {
+            if (Build.VERSION.SDK_INT >= 30 && selected.characteristics.get(CameraCharacteristics.CONTROL_ZOOM_RATIO_RANGE) != null)
+                request.set(CaptureRequest.CONTROL_ZOOM_RATIO, selected.zoom);
+            else if (Float.isFinite(selected.focal) && selected.characteristics.getAvailableCaptureRequestKeys().contains(CaptureRequest.LENS_FOCAL_LENGTH))
+                request.set(CaptureRequest.LENS_FOCAL_LENGTH, selected.focal);
+        }
         if (frameRange != null) request.set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, frameRange);
         if (continuousFocus) request.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO);
         session.setRepeatingRequest(request.build(), null, handler);
@@ -230,7 +266,8 @@ final class CameraRecorder {
         if (surface != null) surface.release();
         if (preview != null) { preview.close(); preview = null; }
         previewListener = null;
-        if (recording) ClipAssembler.enqueue(context, false); listener.stopped(reason);
+        if (recording) ClipAssembler.enqueue(context, false);
+        listener.stopped(reason, cameraFailure && automatic && selected != null ? selected.key : null);
         // An asynchronous open callback must still be allowed to close its returned camera.
         if (!opening) thread.quitSafely();
         else handler.postDelayed(new Runnable() { public void run() { thread.quitSafely(); } }, 15000);

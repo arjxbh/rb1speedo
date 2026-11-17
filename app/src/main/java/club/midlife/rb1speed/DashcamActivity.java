@@ -23,6 +23,7 @@ public final class DashcamActivity extends Activity {
     private CameraPreviewView preview;
     private TextView previewStatus;
     private Button previewButton;
+    private Button cameraButton;
     private boolean previewRequested, previewBound, previewHasFrame;
     private long previewFrameAt;
     private DashcamService.PreviewBinder previewService;
@@ -72,10 +73,14 @@ public final class DashcamActivity extends Activity {
             }
         });
         TextView title = new TextView(this); title.setText("Dashcam · setup while parked"); title.setTextSize(23); content.addView(title);
+        LinearLayout cameraControls = new LinearLayout(this); cameraControls.setGravity(Gravity.CENTER_VERTICAL); content.addView(cameraControls);
+        cameraButton = button("Camera lens · Automatic (widest)", cameraControls, new View.OnClickListener() { public void onClick(View view) { chooseCamera(); }});
+        cameraButton.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1));
         previewRequested = state == null ? getIntent().getBooleanExtra("preview", false) : state.getBoolean("preview", false);
-        previewButton = button("Show aiming preview", content, new View.OnClickListener() { public void onClick(View view) {
+        previewButton = button("Show aiming preview", cameraControls, new View.OnClickListener() { public void onClick(View view) {
             previewRequested = !previewRequested; updatePreview();
         }});
+        previewButton.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1));
         preview = new CameraPreviewView(this);
         content.addView(preview, new LinearLayout.LayoutParams(-1, Math.round(220 * getResources().getDisplayMetrics().density)));
         previewStatus = new TextView(this); previewStatus.setTextSize(14); content.addView(previewStatus);
@@ -139,6 +144,7 @@ public final class DashcamActivity extends Activity {
             if (results.length == 0 || results[0] != PackageManager.PERMISSION_GRANTED) previewRequested = false;
             updatePreview();
         }
+        if (request == 84 && results.length > 0 && results[0] == PackageManager.PERMISSION_GRANTED) chooseCamera();
     }
     @Override public void onResume() {
         super.onResume(); visible = true; main.post(refresh);
@@ -181,12 +187,49 @@ public final class DashcamActivity extends Activity {
             previewHasFrame = false; preview.setImageDrawable(null);
         }
         previewStatus.setText(previewHasFrame ?
-            (DashcamService.recording() ? "● Recording · live aiming preview" : "Live preview · preview alone does not save video") + "\nAlign the horizon with the guides. Rear camera · no microphone." :
+            (DashcamService.recording() ? "● Recording · live aiming preview" : "Live preview · preview alone does not save video") +
+                "\n" + getSharedPreferences("dashcam", 0).getString("activeCamera", "Rear camera") + "\nAlign the horizon with the guides · no microphone." :
             "Waiting for camera frames · " + getSharedPreferences("dashcam", 0).getString("previewStatus", "Opening rear camera"));
+    }
+    private void chooseCamera() {
+        if (checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[]{Manifest.permission.CAMERA}, 84); return;
+        }
+        final String saved = CameraCatalog.preference(this);
+        io.execute(new Runnable() { public void run() {
+            try {
+                final java.util.List<CameraCatalog.Option> options = CameraCatalog.available(DashcamActivity.this);
+                main.post(new Runnable() { public void run() {
+                    if (!visible || isDestroyed()) return;
+                    String[] labels = new String[options.size() + 1]; labels[0] = "Automatic · widest available (recommended)";
+                    int checked = 0;
+                    for (int i = 0; i < options.size(); i++) { labels[i + 1] = options.get(i).label(); if (options.get(i).key.equals(saved)) checked = i + 1; }
+                    new AlertDialog.Builder(DashcamActivity.this).setTitle("Recording camera · 1080p / 30 fps")
+                        .setSingleChoiceItems(labels, checked, new DialogInterface.OnClickListener() { public void onClick(DialogInterface dialog, int which) {
+                            String choice = which == 0 ? CameraCatalog.AUTO : options.get(which - 1).key;
+                            getSharedPreferences("dashcam", 0).edit().putString("cameraChoice", choice).putLong("cameraRetryAfter", 0)
+                                .putString("cameraChoiceLabel", which == 0 ? "Automatic (widest)" : options.get(which - 1).label()).commit();
+                            dialog.dismiss();
+                            if (!choice.equals(saved)) {
+                                previewHasFrame = false; preview.setImageDrawable(null);
+                                if (previewService != null) previewService.cameraChanged();
+                                else if (DashcamService.running()) startService(new Intent(DashcamActivity.this, DashcamService.class).setAction(DashcamService.CHANGE_CAMERA));
+                                DashcamService.maybeStart(DashcamActivity.this);
+                            }
+                            showStatus();
+                        }}).setNegativeButton("Cancel", null).show();
+                    Toast.makeText(DashcamActivity.this, options.isEmpty() ? "Android exposes no compatible 1080p/30 rear cameras. Preview may still work." :
+                        "Only rear lenses exposed by Android and supporting 1080p/30 are listed. Changing lenses finishes the current clip.", Toast.LENGTH_LONG).show();
+                }});
+            } catch (Exception e) {
+                main.post(new Runnable() { public void run() { if (visible) Toast.makeText(DashcamActivity.this, "Camera list unavailable; check camera permission and try again", Toast.LENGTH_LONG).show(); }});
+            }
+        }});
     }
     private void showStatus() {
         refreshPreviewStatus();
         SharedPreferences p = getSharedPreferences("dashcam", 0); ClipStore store = ClipStore.get(this);
+        cameraButton.setText("Camera lens · " + p.getString("cameraChoiceLabel", "Automatic (widest)"));
         long pending = 0, saved = 0; int count = 0, protectionPending = 0; long oldest = Long.MAX_VALUE;
         for (JSONObject c : store.clips()) {
             if (!"READY".equals(c.optString("state"))) continue;
@@ -204,7 +247,9 @@ public final class DashcamActivity extends Activity {
         status.setText("Recording: " + (DashcamService.recording() ? "● REC · writing video" : DashcamService.running() ? "waiting for video frames" : "stopped") +
             "\n" + p.getString("cameraStatus", "Not started") + "\nAuto-record: " + (p.getBoolean("enabled", false) ? "enabled" : "disabled") +
             "\nRecording elapsed: " + (DashcamService.running() && p.getLong("recordingStarted", 0) > 0 ? (System.currentTimeMillis() - p.getLong("recordingStarted", 0)) / 1000 + " sec" : "—") +
-            "\nRear camera · 1080p / 30 fps · 8 Mbps · no microphone" +
+            "\n" + p.getString("activeCamera", "Rear camera · automatic widest") +
+            "\n" + p.getString("cameraSelectionStatus", "Automatic · widest available") +
+            "\n1080p / 30 fps · 8 Mbps · no microphone" +
             String.format(Locale.US, "\nLocal use: %.2f / %.0f GiB · free %.2f GiB\nClips: %d · pending %.2f GiB · protected %.2f GiB",
                 store.usedBytes() / 1073741824.0, p.getLong("quota", DashcamPolicy.QUOTA_BYTES) / 1073741824.0, store.directory.getUsableSpace() / 1073741824.0, count, pending / 1073741824.0, saved / 1073741824.0) +
             "\nAwaiting verified cloud protection: " + protectionPending +

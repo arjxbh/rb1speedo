@@ -1,3 +1,10 @@
+Automatic widest rear camera (1.6.3).
+
+- Default to the widest Android-exposed rear camera compatible with 1080p/30 recording, using sensor size and focal length rather than camera ID order. Support physical lenses behind logical cameras and supported logical zoom-out ranges.
+- Add a persistent camera selector under Settings → Camera & clips → Camera lens; aiming preview uses the selected lens too.
+- Finish the current clip before changing lenses. Auto skips unavailable cameras; missing saved choices fall back to Auto.
+- Show selected lens, approximate field of view and fallback status. Available lenses depend on device firmware. No new permissions or AWS deployment are required.
+
 Google Photos playback (1.6.2).
 
 - Publish completed MP4 clips to Movies/RB1 Speed on Android 10+, visible in Google Photos under Collections → On this device. Backfill existing completed clips when the app opens.

@@ -5,10 +5,14 @@ import android.app.*;
 import android.content.*;
 import android.content.pm.PackageManager;
 import android.os.*;
+import java.util.HashSet;
+import java.util.Set;
 
 /** One camera owner: foreground loop recording, or a preview bound to a visible Activity. */
 public final class DashcamService extends Service {
     static final String STOP = "club.midlife.rb1speed.STOP_CAMERA";
+    static final String CHANGE_CAMERA = "club.midlife.rb1speed.CHANGE_CAMERA";
+    private final Set<String> rejectedCameras = new HashSet<String>();
     private static volatile boolean running;
     private static volatile long lastFrame;
     private CameraRecorder recorder;
@@ -88,9 +92,9 @@ public final class DashcamService extends Service {
             getSharedPreferences("dashcam", 0).edit().putLong("recordingStarted", 0).apply();
             report(this, "Starting rear camera"); ClipAssembler.enqueue(this, true);
         }
-        recorder = new CameraRecorder(this, recorderRecording, new CameraRecorder.Listener() {
+        recorder = new CameraRecorder(this, recorderRecording, new HashSet<String>(rejectedCameras), new CameraRecorder.Listener() {
           public void written() { if (!destroyed && running && !switching) lastFrame = SystemClock.elapsedRealtime(); }
-          public void stopped(final String reason) {
+          public void stopped(final String reason, final String retryCamera) {
             main.post(new Runnable() { public void run() {
                 if (destroyed) return;
                 boolean wasRecording = recorderRecording;
@@ -98,6 +102,11 @@ public final class DashcamService extends Service {
                 if (switching) {
                     switching = false;
                     if (!running) { lastFrame = 0; releaseForeground(); UploadJob.schedule(DashcamService.this, false); }
+                    reconcile(); return;
+                }
+                if (retryCamera != null && (running || previewListener != null)) {
+                    rejectedCameras.add(retryCamera); lastFrame = 0;
+                    getSharedPreferences("dashcam", 0).edit().putString("cameraSelectionStatus", "Camera unavailable; trying the next widest compatible lens").apply();
                     reconcile(); return;
                 }
                 if (wasRecording) {
@@ -113,6 +122,14 @@ public final class DashcamService extends Service {
         }});
         recorder.preview(previewListener); recorder.start();
     }
+    private void changeCamera() {
+        rejectedCameras.clear(); lastFrame = 0;
+        getSharedPreferences("dashcam", 0).edit().putLong("cameraRetryAfter", 0)
+            .putString("previewStatus", "Switching camera").apply();
+        if (recorder != null) {
+            switching = true; stopping = true; recorder.preview(null); recorder.stop("Changing camera");
+        } else reconcile();
+    }
     private void stopRecording(String reason) {
         if (!running && recorder == null) return;
         running = false; lastFrame = 0; main.removeCallbacks(unplugged); disconnectAt = -1;
@@ -123,7 +140,10 @@ public final class DashcamService extends Service {
     @Override public int onStartCommand(Intent intent, int flags, int id) {
         if (intent != null && STOP.equals(intent.getAction())) {
             getSharedPreferences("dashcam", 0).edit().putBoolean("enabled", false).apply(); stopRecording("Stopped manually");
+        } else if (intent != null && CHANGE_CAMERA.equals(intent.getAction())) {
+            changeCamera();
         } else {
+            if (!running) rejectedCameras.clear();
             foreground(); running = true;
             if (stopping) switching = true;
             reconcile();
@@ -133,6 +153,7 @@ public final class DashcamService extends Service {
         return START_NOT_STICKY;
     }
     final class PreviewBinder extends Binder {
+        void cameraChanged() { changeCamera(); }
         void listen(CameraPreviewFrames.Listener listener) {
             previewListener = listener;
             if (listener != null) getSharedPreferences("dashcam", 0).edit().putString("previewStatus", "Opening rear-camera preview").apply();
