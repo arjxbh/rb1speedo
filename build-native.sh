@@ -13,9 +13,10 @@ VERSION_NAME="$(sed -n 's/^versionName=//p' version.properties)"
 rm -rf build-native
 mkdir -p build-native/classes build-native/tests build-native/dex
 java -jar "$ECJ" -8 -warn:none -bootclasspath "$JAR" -d build-native/classes app/src/main/java/club/midlife/rb1speed/*.java
-java -jar "$ECJ" -8 -warn:none -d build-native/tests app/src/main/java/club/midlife/rb1speed/SpeedReading.java app/src/main/java/club/midlife/rb1speed/DriveSession.java app/src/main/java/club/midlife/rb1speed/SpeedWarning.java app/src/main/java/club/midlife/rb1speed/ChimeSound.java app/src/main/java/club/midlife/rb1speed/DisplayBrightness.java app/src/main/java/club/midlife/rb1speed/DashcamPolicy.java app/src/main/java/club/midlife/rb1speed/PreviewPixels.java app/src/main/java/club/midlife/rb1speed/CameraLens.java tests/*.java
+java -jar "$ECJ" -8 -warn:none -d build-native/tests app/src/main/java/club/midlife/rb1speed/SpeedReading.java app/src/main/java/club/midlife/rb1speed/DriveSession.java app/src/main/java/club/midlife/rb1speed/DrivePeak.java app/src/main/java/club/midlife/rb1speed/SpeedWarning.java app/src/main/java/club/midlife/rb1speed/ChimeSound.java app/src/main/java/club/midlife/rb1speed/DisplayBrightness.java app/src/main/java/club/midlife/rb1speed/DashcamPolicy.java app/src/main/java/club/midlife/rb1speed/PreviewPixels.java app/src/main/java/club/midlife/rb1speed/CameraLens.java tests/*.java
 java -cp build-native/tests SpeedReadingTest
 java -cp build-native/tests DrivingFeaturesTest
+java -cp build-native/tests DrivePeakTest
 java -cp build-native/tests DisplayBrightnessTest
 java -cp build-native/tests DashcamPolicyTest
 java -cp build-native/tests PreviewPixelsTest

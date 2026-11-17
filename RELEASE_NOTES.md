@@ -1,3 +1,10 @@
+Current-drive maximum speed (1.6.11).
+
+- Add a small outer-scale maximum-speed pointer and Max mph caption across all five skins. Preserve gauge size, artwork, scale and current-speed needle. Use amber on dark faces and blue on the white Integra face.
+- Start a drive at the first accepted live GPS movement above 1 mph after external power connects. Clear its maximum after three continuous minutes stopped and unplugged. Retain it across Settings, rotation and reopening within the same phone boot. GPS loss/backgrounding restarts stationary confirmation; unobserved movement is not counted.
+- Keep Demo maximum separate from the live drive. Ignore rejected or stale GPS readings. Peaks above 120 mph keep their actual number while the pointer stays at the end of the scale.
+- No new permissions, camera behavior changes or AWS deployment.
+
 Clearer driving-screen status (1.6.10).
 
 - Disable Start recording while the camera service is running or closing, and disable Stop recording while recording is off. Give unavailable controls a distinct muted style while keeping all three camera buttons visible.

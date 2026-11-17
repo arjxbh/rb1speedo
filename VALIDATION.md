@@ -1,3 +1,11 @@
+# Version 1.6.11 — current-drive peak marker
+
+- Native build, seven model suites, alignment and existing-certificate signing passed. DrivePeak tests cover power arming, first movement, monotonic peak, invalid readings, powered stops, unplugged movement, three-minute stationary completion, rearming, GPS gaps and restored state.
+- Dashboard instrumentation passed marker pixel checks for all five skins with unavailable current GPS and with peaks above the analog scale. Checked accessible peak descriptions, accepted/rejected live fixes, separate Demo peaks and persistence after reopening.
+- Peak persistence is scoped to the Android boot count. Pending stationary confirmation restarts on activity recreation, backgrounding or unavailable GPS; the app does not infer that the vehicle remained stopped without fresh observations. GPS speeds while the dashboard is paused are not recorded.
+- Visually inspected the portrait RB1 dashboard with a retained 95 mph peak and current speed at zero; pointer and caption sit clear of the scale and existing controls.
+- Physical-phone acceptance: check marker readability and power-based drive boundaries during normal use. Existing gauge dimensions, current-speed behavior, camera implementation and permissions are unchanged.
+
 # Version 1.6.10 — clearer dashboard status
 
 - Native build and six existing model suites passed. Added DashboardInstrumentation for stopped-camera Start/Stop availability, visible camera error text, full camera-status inspection, GPS accuracy details, repeated healthy GPS inspection without discarding the fix, and leaving while a status dialog is open.

@@ -2,6 +2,8 @@
 
 A native Android GPS speedometer with five JDM-inspired skins. A recessed analog dial, beveled rim, and shaded needle sit beside a large digital mph readout in landscape and above it in portrait. Native buttons stay outside the gauge. Digital speed remains uncapped if the 0–120 mph analog dial reaches its end.
 
+An outer-scale pointer and **Max … mph** label retain the highest accepted GPS speed for the current drive. Connecting external power arms a drive; the first live speed above 1 mph starts it. The drive ends after three continuous minutes stopped (≤1 mph) and unplugged. Settings, rotation and reopening preserve the peak within the same phone boot. GPS loss or leaving the dashboard preserves the peak and restarts the stationary confirmation timer; speeds are only observed while the dashboard tracks GPS. Demo has its own maximum. The pointer stops at 120 mph while the label retains the actual peak.
+
 ## Dashboard skins
 
 Tap **Settings → Skins** in the header to choose a car-inspired dashboard. The app remembers your selection across restarts; canceling keeps the current skin.

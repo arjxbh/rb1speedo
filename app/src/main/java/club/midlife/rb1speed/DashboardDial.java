@@ -9,6 +9,9 @@ final class DashboardDial extends View {
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final RectF arc = new RectF(-375,-375,375,375);
     private final Path pointer = new Path();
+    private final Path peakPointer = new Path();
+    private double maximum = -1;
+    private boolean demoPeak;
     private Bitmap face;
     private DashboardSkin skin = DashboardSkin.RB1;
     private boolean valid;
@@ -19,12 +22,19 @@ final class DashboardDial extends View {
         super(context);
         setLayerType(View.LAYER_TYPE_SOFTWARE,null);
         setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        peakPointer.moveTo(382,0); peakPointer.lineTo(407,-11); peakPointer.lineTo(407,11); peakPointer.close();
         pointer.moveTo(-86,-9); pointer.lineTo(330,-4);
         pointer.lineTo(367,0); pointer.lineTo(330,4); pointer.lineTo(-86,9); pointer.close();
     }
-    void update(DashboardSkin value, double speed, boolean valid, long now) {
+    void update(DashboardSkin value, double speed, boolean valid, double maximum, boolean demoPeak, long now) {
         if (skin != value) { skin=value; discardFace(); }
         this.valid=valid;
+        if (Double.compare(this.maximum,maximum)!=0 || this.demoPeak!=demoPeak) {
+            this.maximum=maximum; this.demoPeak=demoPeak;
+            boolean present=Double.isFinite(maximum) && maximum>=0;
+            setImportantForAccessibility(present ? View.IMPORTANT_FOR_ACCESSIBILITY_YES : View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+            setContentDescription(present ? String.format(java.util.Locale.US, "%s maximum speed %.0f miles per hour", demoPeak ? "Demo" : "Current drive", maximum) : null);
+        }
         float dt=previous==0?.033f:Math.min(.1f,(now-previous)/1000f); previous=now;
         float target=(float)Math.min(120,Math.max(0,speed));
         needle+=(target-needle)*(1-(float)Math.exp(-dt/.13f));
@@ -140,6 +150,14 @@ final class DashboardDial extends View {
             circle(canvas,26,0xff101720);
             reset(0xff6c7e8c); paint.setStyle(Paint.Style.STROKE); paint.setStrokeWidth(1);
             canvas.drawArc(new RectF(-26,-26,26,26),205,115,false,paint);
+        }
+        if (Double.isFinite(maximum) && maximum>=0) {
+            int peakColor=skin==DashboardSkin.INTEGRA ? 0xff164e75 : 0xffffcf70;
+            canvas.save(); canvas.rotate(skin.start+(float)Math.min(120,maximum)*skin.sweep/120);
+            reset(peakColor); canvas.drawPath(peakPointer,paint);
+            reset(0xff05070a); paint.setStyle(Paint.Style.STROKE); paint.setStrokeWidth(2); canvas.drawPath(peakPointer,paint);
+            canvas.restore();
+            text(canvas,String.format(java.util.Locale.US, "%s %.0f mph", demoPeak ? "Demo max" : "Max", maximum),0,330,28,peakColor);
         }
         canvas.restore();
     }
