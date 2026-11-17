@@ -5,8 +5,9 @@ case "${1:-GalleryInstrumentation}" in
     GalleryInstrumentation) RUNNER=GalleryInstrumentation; SUCCESS='Gallery integration: all checks passed' ;;
     CameraChoiceInstrumentation) RUNNER=CameraChoiceInstrumentation; SUCCESS='Camera selection integration: all checks passed' ;;
     CameraDiagnosticsInstrumentation) RUNNER=CameraDiagnosticsInstrumentation; SUCCESS='Camera diagnostics integration: all checks passed' ;;
+    DashboardInstrumentation) RUNNER=DashboardInstrumentation; SUCCESS='Dashboard integration: all checks passed' ;;
     FullAppInstrumentation) RUNNER=FullAppInstrumentation; SUCCESS='Full app integration: all checks passed' ;;
-    *) echo 'Choose GalleryInstrumentation, CameraChoiceInstrumentation, CameraDiagnosticsInstrumentation or FullAppInstrumentation' >&2; exit 2 ;;
+    *) echo 'Choose GalleryInstrumentation, CameraChoiceInstrumentation, CameraDiagnosticsInstrumentation FullAppInstrumentation or DashboardInstrumentation' >&2; exit 2 ;;
 esac
 ./build.sh
 export JAVA_HOME="$PWD/.tools/jdk"

@@ -1,3 +1,11 @@
+Clearer driving-screen status (1.6.10).
+
+- Disable Start recording while the camera service is running or closing, and disable Stop recording while recording is off. Give unavailable controls a distinct muted style while keeping all three camera buttons visible.
+- Show the active lens below the recording indicator, or the stopped/error message when the camera is off. Tap either camera status line for readable details and direct access to Camera & clips. Distinguish initial startup from waiting for video after frames stop arriving; only fresh written video shows REC.
+- Show GPS accuracy alongside the connected state. Tapping a healthy GPS connection opens its status instead of clearing the reading/restarting GPS; enabling/retrying GPS and exiting Demo retain their existing actions.
+- Show external-power/battery state in the footer instead of repeating connected GPS accuracy, and fit long skin titles to the header. Status dialogs close when leaving the dashboard.
+- Keep existing gauge artwork, skin layouts, units, automatic recording and camera selection. No new permissions or AWS deployment.
+
 Wide camera access is now the default (1.6.9).
 
 - Install RB1-Speed.apk. It now uses the working org.codeaurora.snapcam identity, is named RB1 Speed, and upgrades RB1 Speed · Wide in place using the existing signing certificate. Keep Wide installed while updating to retain its settings, pairing and private recordings.

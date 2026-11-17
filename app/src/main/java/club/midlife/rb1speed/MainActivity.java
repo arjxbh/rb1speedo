@@ -31,8 +31,9 @@ public class MainActivity extends Activity implements LocationListener {
     private LocationManager manager;
     private DashboardDial dial;
     private LinearLayout dashboard;
-    private TextView speedText, sourceText, footerText, carText, recordingText;
-    private Button settingsButton, demoButton, gpsButton;
+    private TextView speedText, sourceText, footerText, carText, recordingText, cameraDetailText;
+    private Button settingsButton, demoButton, gpsButton, recordStartButton, recordStopButton;
+    AlertDialog statusDialog;
     private AlertDialog settingsDialog;
     private DashboardSkin skin;
     private final SpeedReading reading = new SpeedReading();
@@ -218,6 +219,7 @@ public class MainActivity extends Activity implements LocationListener {
         active = false; handler.removeCallbacks(ticker); audio.pause();
         if (settingsDialog != null) settingsDialog.dismiss();
         if (debugDialog != null) debugDialog.dismiss();
+        if (statusDialog != null) statusDialog.dismiss();
         handler.removeCallbacks(endBrightnessPreview);
         debugBrightness = -1f;
         sensors.unregisterListener(lightListener);
@@ -251,6 +253,30 @@ public class MainActivity extends Activity implements LocationListener {
         } else if (!manager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
             startActivity(new Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS));
         } else { reading.clear(); startGps(); }
+    }
+    private void gpsAction() {
+        if (!demo && reading.fresh(SystemClock.elapsedRealtime())) {
+            showStatus("GPS status", String.format(Locale.US, "GPS connected\nAccuracy ±%.0f m\n\nThe speed reading uses validated GPS speed. A stale or unreliable fix clears the live display.", accuracy),
+                "Location settings", new DialogInterface.OnClickListener() { public void onClick(DialogInterface dialog, int which) {
+                    startActivity(new Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS));
+                }});
+        } else action();
+    }
+    private void cameraStatus() {
+        android.content.SharedPreferences preferences=getSharedPreferences("dashcam",0);
+        String current=DashcamService.recording() ? "Video recording is active." : DashcamService.running() ? "Waiting for video; recording is not confirmed." : DashcamService.diagnosticsBusy() ? "Camera is closing." : "Recording is off.";
+        String message=current + "\n\nLast camera status:\n" + preferences.getString("cameraStatus","Not recording") + "\n\n" + preferences.getString("activeCamera", "No camera selected yet");
+        showStatus("Camera status",message,"Camera & clips",new DialogInterface.OnClickListener(){public void onClick(DialogInterface dialog,int which){
+            startActivity(new Intent(MainActivity.this,DashcamActivity.class));
+        }});
+    }
+    private void showStatus(String title,String message,String action,DialogInterface.OnClickListener listener) {
+        if(statusDialog!=null)statusDialog.dismiss();
+        final AlertDialog dialog=new AlertDialog.Builder(this).setTitle(title).setMessage(message)
+            .setPositiveButton("Close",null).setNeutralButton(action,listener).create();
+        statusDialog=dialog;
+        dialog.setOnDismissListener(new DialogInterface.OnDismissListener(){public void onDismiss(DialogInterface closed){if(statusDialog==dialog)statusDialog=null;}});
+        dialog.show();
     }
     private void openSkins() {
         DashboardSkin[] skins = DashboardSkin.values();
@@ -328,10 +354,12 @@ public class MainActivity extends Activity implements LocationListener {
     private Button button(String title, View.OnClickListener action) {
         Button button = new Button(this);
         button.setText(title); button.setAllCaps(false); button.setTextSize(14);
-        button.setTextColor(0xffe4edf7); button.setMinWidth(0); button.setMinimumWidth(0);
+        button.setTextColor(new android.content.res.ColorStateList(new int[][]{new int[]{-android.R.attr.state_enabled},new int[]{}},new int[]{0xff82909f,0xffe4edf7})); button.setMinWidth(0); button.setMinimumWidth(0);
         button.setMinHeight(dp(48)); button.setMinimumHeight(dp(48));
         button.setPadding(dp(12), dp(4), dp(12), dp(4));
         StateListDrawable states = new StateListDrawable();
+        GradientDrawable disabled=new GradientDrawable(); disabled.setColor(0xff0a1017); disabled.setCornerRadius(dp(10)); disabled.setStroke(dp(1),0xff202c38);
+        states.addState(new int[]{-android.R.attr.state_enabled},disabled);
         for (boolean pressed : new boolean[]{true, false}) {
             GradientDrawable background = new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
                 pressed ? new int[]{0xff2a3c50,0xff182738} : new int[]{0xff19232e,0xff0c121a});
@@ -352,6 +380,8 @@ public class MainActivity extends Activity implements LocationListener {
     private LinearLayout header() {
         LinearLayout header = row();
         carText = label(18,0xffdce7f0); carText.setGravity(Gravity.CENTER_VERTICAL | Gravity.START);
+        carText.setSingleLine(true); carText.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        carText.setAutoSizeTextTypeUniformWithConfiguration(12,18,1,android.util.TypedValue.COMPLEX_UNIT_SP);
         carText.setTypeface(Typeface.create("sans-serif-condensed",Typeface.BOLD));
         header.addView(carText,new LinearLayout.LayoutParams(0,dp(56),1));
         settingsButton = button("Settings",new View.OnClickListener() { public void onClick(View view) { openSettings(); }});
@@ -398,27 +428,32 @@ public class MainActivity extends Activity implements LocationListener {
         panel.addView(speedText,new LinearLayout.LayoutParams(-1,0,1));
         sourceText=label(13,0xffa9bacb);
         panel.addView(sourceText,new LinearLayout.LayoutParams(-1,dp(24)));
-        gpsButton=button("Enable GPS",new View.OnClickListener() { public void onClick(View view) { action(); refreshDashboard(SystemClock.elapsedRealtime()); }});
-        gpsButton.setTextSize(13);
+        gpsButton=button("Enable GPS",new View.OnClickListener() { public void onClick(View view) { gpsAction(); refreshDashboard(SystemClock.elapsedRealtime()); }});
+        gpsButton.setTextSize(13); gpsButton.setTag("gps-control");
         LinearLayout.LayoutParams gpsParams=new LinearLayout.LayoutParams(-1,dp(52)); gpsParams.setMargins(0,dp(4),0,dp(4));
         panel.addView(gpsButton,gpsParams);
         LinearLayout controls=row();
-        recordingText = label(13, 0xffa9bacb);
-        recordingText.setOnClickListener(new View.OnClickListener() { public void onClick(View view) {
-            Toast.makeText(MainActivity.this, getSharedPreferences("dashcam", 0).getString("cameraStatus", "Camera off"), Toast.LENGTH_LONG).show();
-        }});
-        controls.addView(recordingText, new LinearLayout.LayoutParams(0, dp(48), 1));
+        LinearLayout cameraState=new LinearLayout(this); cameraState.setOrientation(LinearLayout.VERTICAL); cameraState.setGravity(Gravity.CENTER);
+        recordingText = label(13, 0xffa9bacb); recordingText.setTag("camera-state"); recordingText.setSingleLine(true);
+        recordingText.setAutoSizeTextTypeUniformWithConfiguration(10,13,1,android.util.TypedValue.COMPLEX_UNIT_SP);
+        cameraDetailText=label(11,0xffa9bacb); cameraDetailText.setTag("camera-detail"); cameraDetailText.setSingleLine(true); cameraDetailText.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        View.OnClickListener inspectCamera=new View.OnClickListener(){public void onClick(View view){cameraStatus();}};
+        recordingText.setOnClickListener(inspectCamera); cameraDetailText.setOnClickListener(inspectCamera);
+        cameraState.addView(recordingText,new LinearLayout.LayoutParams(-1,dp(24)));
+        cameraState.addView(cameraDetailText,new LinearLayout.LayoutParams(-1,dp(20)));
+        controls.addView(cameraState, new LinearLayout.LayoutParams(0, dp(48), 1));
         demoButton=button("Demo",new View.OnClickListener() { public void onClick(View view) { toggleDemo(); }});
         controls.addView(demoButton,weightedButton());
         panel.addView(controls,new LinearLayout.LayoutParams(-1,dp(56)));
         LinearLayout cameraControls = row();
-        Button rear = button("Start recording", new View.OnClickListener() { public void onClick(View view) { startDashcam(DashcamService.START); }});
+        recordStartButton = button("Start recording", new View.OnClickListener() { public void onClick(View view) { startDashcam(DashcamService.START); }});
         Button flip = button("Flip camera", new View.OnClickListener() { public void onClick(View view) { startDashcam(DashcamService.FLIP); }});
-        Button stop = button("Stop recording", new View.OnClickListener() { public void onClick(View view) {
+        recordStopButton = button("Stop recording", new View.OnClickListener() { public void onClick(View view) {
             getSharedPreferences("dashcam", 0).edit().putBoolean("enabled", false).apply();
             startService(new Intent(MainActivity.this, DashcamService.class).setAction(DashcamService.STOP));
         }});
-        for (Button control : new Button[]{rear, flip, stop}) { control.setTextSize(11); cameraControls.addView(control, weightedButton()); }
+        recordStartButton.setTag("record-start"); recordStopButton.setTag("record-stop");
+        for (Button control : new Button[]{recordStartButton, flip, recordStopButton}) { control.setTextSize(11); cameraControls.addView(control, weightedButton()); }
         panel.addView(cameraControls, new LinearLayout.LayoutParams(-1, dp(56)));
         footerText=label(11,0xff8a9dad); footerText.setMaxLines(2);
         panel.addView(footerText,new LinearLayout.LayoutParams(-1,dp(28)));
@@ -447,8 +482,16 @@ public class MainActivity extends Activity implements LocationListener {
         settingsButton.setVisibility(driveSession.controlsVisible() ? View.VISIBLE : View.INVISIBLE);
         if (!driveSession.controlsVisible() && settingsDialog != null) settingsDialog.dismiss();
         boolean recording = DashcamService.recording();
-        setText(recordingText, recording ? (DashcamService.front() ? "● REC Front" : "● REC Rear") : DashcamService.running() ? "○ Starting camera" : DashcamService.front() ? "○ Front selected" : "○ Camera off");
-        recordingText.setTextColor(recording ? 0xffff6868 : 0xffa9bacb);
+        boolean cameraRunning=DashcamService.running();
+        boolean cameraClosing=!cameraRunning && DashcamService.diagnosticsBusy();
+        android.content.SharedPreferences cameraPreferences=getSharedPreferences("dashcam",0);
+        String cameraMessage=cameraPreferences.getString("cameraStatus","Not recording");
+        setText(recordingText, recording ? (DashcamService.front() ? "● REC Front" : "● REC Rear") : cameraRunning ? (cameraPreferences.getLong("recordingStarted",0)>0 ? "○ Waiting for video" : "○ Starting camera") : DashcamService.front() ? "○ Front selected" : "○ Camera off");
+        recordingText.setTextColor(recording ? 0xffff6868 : cameraRunning ? 0xffffb15e : 0xffa9bacb);
+        setText(cameraDetailText,cameraClosing ? "Closing camera…" : cameraRunning ? cameraPreferences.getString("activeCamera", "Opening camera…") : cameraMessage);
+        cameraDetailText.setContentDescription("Camera details: "+cameraDetailText.getText()+". Tap for status.");
+        recordStartButton.setEnabled(!cameraRunning && !cameraClosing);
+        recordStopButton.setEnabled(cameraRunning);
         recordingText.setContentDescription(recording ? "Dashcam recording" : DashcamService.running() ? "Dashcam starting or waiting for video" : "Dashcam not recording");
         int ink=skin == DashboardSkin.INTEGRA ? 0xfff0eee4 : skin.ink;
         speedText.setTextColor(ink);
@@ -458,10 +501,11 @@ public class MainActivity extends Activity implements LocationListener {
         sourceText.setTextColor(demo?0xffffb15e:0xffa9bacb);
         setText(demoButton,demo?"Exit demo":"Demo");
         demoButton.setVisibility(demo||driveSession.demoVisible()?View.VISIBLE:View.INVISIBLE);
-        String label=demo?"Return to live GPS":fresh?"GPS connected":status.equals("GPS CONNECTED")?"Signal lost · Waiting for GPS":status;
+        String label=demo?"Return to live GPS":fresh?String.format(Locale.US,"GPS connected · ±%.0f m",accuracy):status.equals("GPS CONNECTED")?"Signal lost · Waiting for GPS":status;
         setText(gpsButton,label);
+        gpsButton.setContentDescription(demo ? "Return to live GPS" : fresh ? "GPS connected. Tap for GPS status." : "GPS unavailable. Tap to enable or retry.");
         gpsButton.setTextColor(demo?0xffffb15e:fresh?0xffb4efdb:0xffe4edf7);
-        setText(footerText,now<greetingUntil?DriveAudio.GREETING:demo?"Display preview only":fresh?String.format(Locale.US,"GPS accuracy ±%.0f m",accuracy):"Use outdoors with a clear view of the sky");
+        setText(footerText,now<greetingUntil?DriveAudio.GREETING:demo?"Display preview only":fresh?(powered?"External power connected":"Running on battery"):"Use outdoors with a clear view of the sky");
         dial.update(skin,speed,valid,now);
     }
 }

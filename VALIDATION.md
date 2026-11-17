@@ -1,3 +1,10 @@
+# Version 1.6.10 — clearer dashboard status
+
+- Native build and six existing model suites passed. Added DashboardInstrumentation for stopped-camera Start/Stop availability, visible camera error text, full camera-status inspection, GPS accuracy details, repeated healthy GPS inspection without discarding the fix, and leaving while a status dialog is open.
+- Dashboard and full-app upgrade/provider integration suites passed. A post-instrumentation emulator capture was incomplete; a clean process restart rendered the complete dashboard correctly.
+- Portrait and landscape RB1 screenshots inspected for status-line fit, readable disabled controls, header and gauge alignment. Existing gauge artwork and layout weights are unchanged; shared title text now auto-sizes within 12–18 sp.
+- Device acceptance remains: verify active recording disables Start and enables Stop, the active ultrawide lens appears in the second line, Stop shows camera closing until release, and a real frame interruption clears REC and shows waiting for video. No camera-service, recording-format, permission or AWS changes.
+
 # Version 1.6.9 — Wide is the default app
 
 - Native and Gradle application IDs are now `org.codeaurora.snapcam`; the Java namespace and fully qualified component names remain unchanged. The default native output is the sole `RB1-Speed.apk`, labelled RB1 Speed. Separate Wide/helper packaging and variant routing have been removed.
