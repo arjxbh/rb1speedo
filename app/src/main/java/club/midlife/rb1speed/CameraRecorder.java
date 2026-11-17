@@ -25,9 +25,7 @@ final class CameraRecorder {
     private final boolean recording;
     private final Set<String> rejected;
     private CameraCatalog.Option selected;
-    private CameraCatalog.Option forced;
     private boolean front;
-    private Runnable opened;
     private boolean automatic, cameraFailure;
     private CameraPreviewFrames preview;
     private volatile CameraPreviewFrames.Listener previewListener;
@@ -48,13 +46,7 @@ final class CameraRecorder {
     CameraRecorder(Context context, boolean recording, Set<String> rejected, Listener listener) {
         this.context = context; this.recording = recording; this.rejected = rejected; this.listener = listener; store = ClipStore.get(context);
     }
-    CameraRecorder select(CameraCatalog.Option option, boolean front) { this.forced = option; this.front = front; return this; }
-    CameraRecorder whenOpened(Runnable callback) { opened = callback; return this; }
-    void configure() {
-        if (handler != null) handler.post(new Runnable() { public void run() {
-            if (!finished && !closing && camera != null && session == null) createSession();
-        }});
-    }
+    CameraRecorder facing(boolean front) { this.front = front; return this; }
     void preview(CameraPreviewFrames.Listener listener) {
         previewListener = listener;
         if (handler != null) handler.post(new Runnable() { public void run() {
@@ -79,27 +71,27 @@ final class CameraRecorder {
                 throw new IllegalStateException("Device thermal protection active");
             if (recording && !store.makeSpace()) throw new IllegalStateException("Storage quota or free-space reserve reached");
             CameraManager manager = (CameraManager)context.getSystemService(Context.CAMERA_SERVICE);
-            List<CameraCatalog.Option> options = CameraCatalog.available(context);
-            if (!recording && options.isEmpty()) options = CameraCatalog.available(context, false);
-            String preference = CameraCatalog.preference(context);
+            int direction = front ? CameraCharacteristics.LENS_FACING_FRONT : CameraCharacteristics.LENS_FACING_BACK;
+            List<CameraCatalog.Option> options = CameraCatalog.available(context, true, direction);
+            if (!recording && options.isEmpty()) options = CameraCatalog.available(context, false, direction);
+            String preference = front ? CameraCatalog.AUTO : CameraCatalog.preference(context);
             automatic = CameraCatalog.AUTO.equals(preference);
             if (!automatic) {
                 boolean present = false;
                 for (CameraCatalog.Option option : options) if (option.key.equals(preference)) present = true;
                 automatic = !present;
             }
-            selected = forced != null ? forced : CameraCatalog.choose(options, preference, rejected);
-            if (forced != null) automatic = false;
-            if (selected == null) throw new IllegalStateException("No compatible rear camera available; choose a camera in Settings");
+            selected = CameraCatalog.choose(options, preference, rejected);
+            if (selected == null) throw new IllegalStateException((front ? "No compatible front camera available" : "No compatible rear camera available; choose a camera in Settings"));
             CameraCharacteristics chosen = selected.characteristics;
-            if (!front) context.getSharedPreferences("dashcam", 0).edit().putString("activeCamera", selected.label())
+            context.getSharedPreferences("dashcam", 0).edit().putString("activeCamera", selected.label())
                 .putString("cameraSelectionStatus", automatic && !CameraCatalog.AUTO.equals(preference) ? "Saved camera unavailable; using widest available" :
                     automatic && !rejected.isEmpty() ? "Automatic · next widest; unavailable cameras skipped" : automatic ? "Automatic · widest available" : "Manual selection").apply();
             StreamConfigurationMap map = chosen.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
             boolean supported = false;
             Size[] videoSizes = map.getOutputSizes(MediaCodec.class);
             if (videoSizes != null) for (Size size : videoSizes) if (size.getWidth() == 1920 && size.getHeight() == 1080) supported = true;
-            if (recording && !supported) throw new IllegalStateException("Rear camera does not expose 1080p recording");
+            if (recording && !supported) throw new IllegalStateException("Selected camera does not expose 1080p recording");
             CameraCharacteristics controls = selected.physicalId == null ? chosen : manager.getCameraCharacteristics(selected.openId);
             Range<Integer>[] ranges = controls.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES);
             if (ranges != null) for (Range<Integer> range : ranges) {
@@ -115,7 +107,7 @@ final class CameraRecorder {
             }
             int rotation = ((WindowManager)context.getSystemService(Context.WINDOW_SERVICE)).getDefaultDisplay().getRotation();
             orientation = (chosen.get(CameraCharacteristics.SENSOR_ORIENTATION) + (front ? rotation : -rotation) * 90 + 360) % 360;
-            Size previewSize = forced != null ? null : CameraPreviewFrames.choose(map.getOutputSizes(ImageFormat.YUV_420_888));
+            Size previewSize = CameraPreviewFrames.choose(map.getOutputSizes(ImageFormat.YUV_420_888));
             if (previewSize != null) {
                 try { preview = new CameraPreviewFrames(previewSize, orientation, handler); preview.listen(previewListener); }
                 catch (RuntimeException e) { if (!recording) throw e; previewUnavailable(); }
@@ -139,13 +131,13 @@ final class CameraRecorder {
                     opening = false;
                     if (finished || closing) { device.close(); if (finished) thread.quitSafely(); return; }
                     camera = device;
-                    if (opened != null) opened.run(); else createSession();
+                    createSession();
                 }
                 public void onDisconnected(CameraDevice device) { opening = false; device.close(); if (finished) thread.quitSafely(); cameraStop("Camera disconnected"); }
                 public void onError(CameraDevice device, int error) {
                     opening = false; device.close(); if (finished) thread.quitSafely();
                     cameraStop((front ? "Front" : "Rear") + " camera: " +
-                        (error == ERROR_MAX_CAMERAS_IN_USE ? "firmware rejected simultaneous cameras" :
+                        (error == ERROR_MAX_CAMERAS_IN_USE ? "camera resources unavailable" :
                          error == ERROR_CAMERA_IN_USE ? "camera already in use" : "error " + error));
                 }
             }, handler);
@@ -235,7 +227,7 @@ final class CameraRecorder {
         if (closing && mux == null) return;
         boolean keyframe = (info.flags & MediaCodec.BUFFER_FLAG_KEY_FRAME) != 0;
         if (origin < 0) { if (!keyframe) return; origin = info.presentationTimeUs; wall = System.currentTimeMillis();
-            if (!front) DashcamService.report(context, DashcamService.dual() ? "Recording rear + front cameras · 1080p / H.264" : "Recording rear camera · 1080p / H.264");
+            DashcamService.report(context, "Recording " + (front ? "front" : "rear") + " camera · 1080p / H.264");
             context.getSharedPreferences("dashcam", 0).edit().putLong("recordingStarted", wall).apply(); }
         long pts = info.presentationTimeUs;
         if (mux == null) {

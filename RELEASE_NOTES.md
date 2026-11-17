@@ -1,3 +1,11 @@
+Camera flipping and ultrawide lens debugging (1.6.7).
+
+- Replace Start 360 recording with Flip camera. One camera records at a time; switching closes the current clip before opening the other camera. While stopped, Flip selects the next manual camera without starting recording. Automatic starts default to rear.
+- Remove concurrent front/rear recording, the dual-camera diagnostic matrix, Camera1 dual previews, split-screen encoding, and their obsolete model tests.
+- Add Debug → Ultrawide lens debug: exposed/physical camera metadata, sensor/focal field estimates, zoom-out routes, a bounded numeric-ID metadata probe, and an eight-second visible preview for each discovered rear candidate. Copyable reports persist separately from the previous dual-camera logs. Debug probes save no footage and do not change lens preferences.
+- Add read-only package-access diagnostics and optional standalone lens helpers using snapcam, aweme, and meitu package identities. Stop RB1 recording before running a helper. Helpers have camera permission only, do not replace the main app, and do not modify firmware or require root. Package conflicts and firmware restrictions may prevent a helper from installing or accessing additional lenses.
+- Auxiliary-lens access and 1080p/30 recording remain unverified on HD1925_11_F.05; metadata/preview access is not a guarantee of recording support. No AWS deployment.
+
 Manual camera diagnostics (1.6.6).
 
 - Add Settings → Debug → Camera diagnostics with individually selectable capability scan, single-camera recording baseline, open-only pairs, dual YUV capture, two independent encoders, one split-screen encoder, and legacy Camera1 preview tests.

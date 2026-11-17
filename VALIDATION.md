@@ -1,3 +1,12 @@
+# Version 1.6.7 — single-camera flipping and ultrawide discovery
+
+- Native build, six remaining model suites, APK alignment, and existing-certificate signatures passed. Removed dual-camera recorder orchestration, dual/Camera1/split-screen diagnostic paths, and obsolete split-screen pixel tests.
+- Android 15 emulator: rewritten lens-debug integration passed scan metadata (package, field of view, zoom, physical routes), bounded IDs 0–9 queries, read-only package allowlist information, actual eight-second rear preview, cancellation, leaving during asynchronous opening, preserved recording/lens/retry settings, and saved reports after reopening.
+- Camera-choice integration passed saved rear-lens selection and real rear → front → rear preview/service handoffs without enabling recording. Physical front/rear recording transitions, clip playback/orientation, and recording gaps still need handset acceptance; the emulator's rear recording route does not expose 1080p.
+- Standalone snapcam APK emulator integration passed the same metadata, numeric-ID, preview, cancellation, and report-persistence checks under `org.codeaurora.snapcam`, installed alongside RB1 without a declared recording service.
+- Optional standalone snapcam/aweme/meitu helpers reuse the lens-debug screen with only camera permission and no declared services or network access. Package identities and signing are verified during their build. Device-side auxiliary exposure on HD1925_11_F.05 remains unverified; a visible preview does not establish 1080p/30 recording support.
+- No new main-app permissions or AWS deployment.
+
 # Version 1.6.6 — manual camera diagnostics
 
 - Native build, seven model suites, alignment, and existing-certificate APK signatures passed. Added deterministic tests for planar/semiplanar split-screen chroma layout, multiple chroma rows, input validation, and source preservation.

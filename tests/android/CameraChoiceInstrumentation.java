@@ -37,6 +37,16 @@ public final class CameraChoiceInstrumentation extends Instrumentation {
             CameraCatalog.Option widest = CameraCatalog.choose(options, CameraCatalog.AUTO, new HashSet<String>());
             frames(p, widest.label(), "Automatic · widest available");
             check(!DashcamService.running() && !DashcamService.recording(), "preview-only switching must not enable recording");
+            List<CameraCatalog.Option> fronts=CameraCatalog.available(context,false,android.hardware.camera2.CameraCharacteristics.LENS_FACING_FRONT);
+            check(!fronts.isEmpty(),"front preview route missing");
+            context.startService(new Intent(context,DashcamService.class).setAction(DashcamService.FLIP));
+            CameraCatalog.Option front=CameraCatalog.choose(fronts,CameraCatalog.AUTO,new HashSet<String>());
+            frames(p,front.label(),"Automatic · widest available");
+            check(DashcamService.front(),"flip did not select front");
+            check(!DashcamService.running(),"flip enabled recording from preview");
+            context.startService(new Intent(context,DashcamService.class).setAction(DashcamService.FLIP));
+            frames(p,widest.label(),"Automatic · widest available");
+            check(!DashcamService.front(),"flip did not return to rear");
             close();
         } finally {
             close();

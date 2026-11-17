@@ -27,7 +27,9 @@ final class CameraCatalog {
             field = sensor == null ? Double.NaN : CameraLens.fieldOfView(sensor.getWidth(), sensor.getHeight(), focal, zoom);
         }
         String label() {
-            String lens = physicalId == null ? "Rear camera " + openId : "Rear lens " + physicalId + " (camera " + openId + ")";
+            Integer facing = characteristics.get(CameraCharacteristics.LENS_FACING);
+            String side = facing != null && facing == CameraCharacteristics.LENS_FACING_FRONT ? "Front" : "Rear";
+            String lens = physicalId == null ? side + " camera " + openId : side + " lens " + physicalId + " (camera " + openId + ")";
             if (zoom < 1) lens += String.format(Locale.US, " · %.2f× wide", zoom);
             return lens + (Double.isFinite(field) ? String.format(Locale.US, " · ≈%.0f°", field) : " · field of view unavailable");
         }
@@ -37,6 +39,9 @@ final class CameraCatalog {
         return available(context, true);
     }
     static List<Option> available(Context context, boolean recording) throws CameraAccessException {
+        return available(context, recording, CameraCharacteristics.LENS_FACING_BACK);
+    }
+    static List<Option> available(Context context, boolean recording, int direction) throws CameraAccessException {
         CameraManager manager = (CameraManager)context.getSystemService(Context.CAMERA_SERVICE);
         List<Option> result = new ArrayList<Option>();
         String[] ids = manager.getCameraIdList(); Arrays.sort(ids);
@@ -45,7 +50,7 @@ final class CameraCatalog {
             CameraCharacteristics c;
             try { c = manager.getCameraCharacteristics(id); } catch (CameraAccessException | IllegalArgumentException | SecurityException e) { continue; }
             Integer facing = c.get(CameraCharacteristics.LENS_FACING);
-            if (facing == null || facing != CameraCharacteristics.LENS_FACING_BACK) continue;
+            if (facing == null || facing != direction) continue;
             if (recording ? usable(c) : previewable(c)) {
                 result.add(new Option(id, null, c, 1f));
                 if (Build.VERSION.SDK_INT >= 30) {
@@ -61,7 +66,7 @@ final class CameraCatalog {
                     try {
                         CameraCharacteristics p = manager.getCameraCharacteristics(lens);
                         Integer side = p.get(CameraCharacteristics.LENS_FACING);
-                        if (side != null && side == CameraCharacteristics.LENS_FACING_BACK && (recording ? usable(p) : previewable(p))) result.add(new Option(id, lens, p, 1f));
+                        if (side != null && side == direction && (recording ? usable(p) : previewable(p))) result.add(new Option(id, lens, p, 1f));
                     } catch (CameraAccessException | IllegalArgumentException | SecurityException e) { /* Firmware may hide auxiliary metadata. */ }
                 }
             }
@@ -70,31 +75,6 @@ final class CameraCatalog {
             int field = CameraLens.compare(a.field, b.field); return field != 0 ? field : a.key.compareTo(b.key);
         }});
         return result;
-    }
-    /** Prefer an advertised pair; allow one runtime compatibility attempt when none is advertised. */
-    static Option[] concurrent(Context context) throws CameraAccessException {
-        if (Build.VERSION.SDK_INT < 30) throw new IllegalStateException("360 recording requires concurrent camera support (Android 11+)");
-        CameraManager manager = (CameraManager)context.getSystemService(Context.CAMERA_SERVICE);
-        Set<Set<String>> pairs = manager.getConcurrentCameraIds();
-        Option[] candidate = null;
-        for (Option rear : available(context)) {
-            if (rear.physicalId != null || rear.zoom < 1f) continue;
-            for (String id : manager.getCameraIdList()) {
-                CameraCharacteristics c = manager.getCameraCharacteristics(id);
-                Integer facing = c.get(CameraCharacteristics.LENS_FACING);
-                if (facing == null || facing != CameraCharacteristics.LENS_FACING_FRONT || !usable(c)) continue;
-                if (rear.openId.equals(id)) continue;
-                if (candidate == null && rear.physicalId == null && rear.zoom == 1f)
-                    candidate = new Option[]{rear, new Option(id, null, c, 1f)};
-                for (Set<String> pair : pairs)
-                    if (pair.contains(rear.openId) && pair.contains(id))
-                        return new Option[]{rear, new Option(id, null, c, 1f)};
-            }
-        }
-        // Older vendor HALs may permit opening both cameras without advertising a pair.
-        // Try independent, directly exposed cameras; runtime errors remain authoritative.
-        if (pairs.isEmpty() && candidate != null) return candidate;
-        throw new IllegalStateException("No compatible rear/front 1080p camera pair on " + Build.MODEL + " / " + Build.DISPLAY);
     }
     private static boolean previewable(CameraCharacteristics c) {
         StreamConfigurationMap map = c.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);

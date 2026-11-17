@@ -5,9 +5,11 @@ case "${1:-GalleryInstrumentation}" in
     GalleryInstrumentation) RUNNER=GalleryInstrumentation; SUCCESS='Gallery integration: all checks passed' ;;
     CameraChoiceInstrumentation) RUNNER=CameraChoiceInstrumentation; SUCCESS='Camera selection integration: all checks passed' ;;
     CameraDiagnosticsInstrumentation) RUNNER=CameraDiagnosticsInstrumentation; SUCCESS='Camera diagnostics integration: all checks passed' ;;
-    *) echo 'Choose GalleryInstrumentation, CameraChoiceInstrumentation or CameraDiagnosticsInstrumentation' >&2; exit 2 ;;
+    LensProbeInstrumentation) RUNNER=LensProbeInstrumentation; SUCCESS='Camera diagnostics integration: all checks passed' ;;
+    *) echo 'Choose GalleryInstrumentation, CameraChoiceInstrumentation, CameraDiagnosticsInstrumentation or LensProbeInstrumentation' >&2; exit 2 ;;
 esac
 ./build.sh
+if [[ "$RUNNER" == LensProbeInstrumentation ]]; then ./build-lens-probes.sh; fi
 export JAVA_HOME="$PWD/.tools/jdk"
 export PATH="$JAVA_HOME/bin:$PATH"
 SDK="$PWD/.tools/android-sdk"
@@ -21,7 +23,11 @@ find "$OUT/classes" -name '*.class' -print0 | xargs -0 "$BT/d8" --lib "$JAR" --c
 (cd "$OUT/dex" && zip -q ../test-unsigned.apk classes.dex)
 "$BT/zipalign" -f 4 "$OUT/test-unsigned.apk" "$OUT/test-aligned.apk"
 "$BT/apksigner" sign --ks development.jks --ks-key-alias rb1 --ks-pass pass:android --out "$OUT/test.apk" "$OUT/test-aligned.apk"
-"$SDK/platform-tools/adb" -e install -r -g build-native/RB1-Speed.apk
+if [[ "$RUNNER" == LensProbeInstrumentation ]]; then
+    "$SDK/platform-tools/adb" -e install -r -g build-native/RB1-LensProbe-snapcam.apk
+else
+    "$SDK/platform-tools/adb" -e install -r -g build-native/RB1-Speed.apk
+fi
 "$SDK/platform-tools/adb" -e install -r "$OUT/test.apk"
 "$SDK/platform-tools/adb" -e shell am instrument -w "club.midlife.rb1speed.tests/club.midlife.rb1speed.$RUNNER" | tee "$OUT/result.txt"
 grep -q "$SUCCESS" "$OUT/result.txt"

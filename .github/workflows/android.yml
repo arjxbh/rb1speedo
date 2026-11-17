@@ -51,12 +51,16 @@ jobs:
           yes | ./setup-build.sh
       - name: Test, build, verify alignment and signature
         run: ./build.sh
+      - name: Build and verify standalone lens access probes
+        run: ./build-lens-probes.sh
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: RB1-Speed
           path: |
             build-native/RB1-Speed.apk
             build-native/RB1-Speed.apk.sha256
+            build-native/RB1-LensProbe-*.apk
+            build-native/RB1-LensProbe-*.apk.sha256
           if-no-files-found: error
           retention-days: 30
 
@@ -78,9 +82,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           cd build-native
-          sha256sum --check RB1-Speed.apk.sha256
+          sha256sum --check RB1-Speed.apk.sha256 RB1-LensProbe-*.apk.sha256
           cd ..
           gh release create "$GITHUB_REF_NAME" \
             build-native/RB1-Speed.apk build-native/RB1-Speed.apk.sha256 \
+            build-native/RB1-LensProbe-*.apk build-native/RB1-LensProbe-*.apk.sha256 \
             --verify-tag --latest --title "RB1 Speed $GITHUB_REF_NAME" \
             --notes-file RELEASE_NOTES.md
