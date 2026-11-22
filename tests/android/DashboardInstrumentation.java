@@ -18,6 +18,25 @@ public final class DashboardInstrumentation extends Instrumentation {
         catch(Throwable e){result.putString("stream","Dashboard integration FAILED: "+android.util.Log.getStackTraceString(e));finish(Activity.RESULT_CANCELED,result);}
     }
     private static void check(boolean value,String why){if(!value)throw new AssertionError(why);}
+    private void checkDigitalSpeed() {
+        DigitalSpeedView display = new DigitalSpeedView(activity);
+        display.layout(0, 0, 240, 100);
+        display.update("288", Color.CYAN);
+        Bitmap frame = Bitmap.createBitmap(240, 100, Bitmap.Config.ARGB_8888);
+        display.draw(new Canvas(frame));
+        int[] activeSegments = new int[3];
+        for (int x = 0; x < frame.getWidth(); x++) {
+            for (int y = 0; y < frame.getHeight(); y++) {
+                if (Color.alpha(frame.getPixel(x, y)) > 200) activeSegments[x / 80]++;
+            }
+        }
+        for (int active : activeSegments) check(active > 0, "all three speed digits must fit");
+        check("288 miles per hour".contentEquals(display.getContentDescription()), "digital speed must be accessible");
+        display.update("", Color.CYAN);
+        check("Speed unavailable".contentEquals(display.getContentDescription()), "missing speed must be accessible");
+        frame.recycle();
+    }
+
     private void checkWarningPulse() {
         DashboardDial gauge = new DashboardDial(activity);
         gauge.layout(0, 0, 900, 900);
@@ -77,6 +96,7 @@ public final class DashboardInstrumentation extends Instrumentation {
                     }
                 }
                 checkWarningPulse();
+                checkDigitalSpeed();
                 View root=activity.findViewById(android.R.id.content);
                 Button start=(Button)root.findViewWithTag("record-start"),stop=(Button)root.findViewWithTag("record-stop");
                 check(start!=null && start.isEnabled(),"start unavailable while stopped");

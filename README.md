@@ -1,6 +1,6 @@
 # RB1 Speed
 
-A native Android GPS speedometer with five JDM-inspired skins. A recessed analog dial, beveled rim, and shaded needle sit beside a large digital mph readout in landscape and above it in portrait. Native buttons stay outside the gauge. Digital speed remains uncapped if the 0–120 mph analog dial reaches its end.
+A native Android GPS speedometer with five JDM-inspired skins. A recessed analog dial, beveled rim, and shaded needle sit beside a large seven-segment mph readout in landscape and above it in portrait. A small GPS status beside the mph label opens details or lets you retry a fix. Native buttons stay outside the gauge. Digital speed remains uncapped if the 0–120 mph analog dial reaches its end.
 
 An outer-scale pointer and **Max … mph** label retain the highest accepted GPS speed for the current drive. The first live speed above 1 mph starts a drive on battery or external power. The drive ends after three continuous minutes stopped (≤1 mph) and unplugged. Settings, rotation and reopening preserve the peak within the same phone boot. GPS loss or leaving the dashboard preserves the peak and restarts the stationary confirmation timer; speeds are only observed while the dashboard tracks GPS. Demo has its own maximum. The pointer stops at 120 mph while the label retains the actual peak.
 
@@ -115,7 +115,7 @@ The **Android APK** workflow runs for pushes to `main`, pull requests, and manua
 To publish an update:
 
 1. Increase `versionCode` and `versionName` in `version.properties` (both build paths read this file).
-2. Update `RELEASE_NOTES.md`, run `./build.sh`, and commit the changes to `main`.
+2. Replace `RELEASE_NOTES.md` with a short, current-release summary, run `./build.sh`, and commit the changes to `main`.
 3. Push `main`, then push a matching version tag. For example, for version 1.2:
 
 ```sh

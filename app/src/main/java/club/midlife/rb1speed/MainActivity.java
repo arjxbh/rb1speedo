@@ -31,7 +31,8 @@ public class MainActivity extends Activity implements LocationListener {
     private LocationManager manager;
     private DashboardDial dial;
     private LinearLayout dashboard;
-    private TextView speedText, sourceText, footerText, carText, recordingText, cameraDetailText;
+    private DigitalSpeedView speedDisplay;
+    private TextView sourceText, footerText, carText, recordingText, cameraDetailText;
     private Button settingsButton, demoButton, gpsButton, recordStartButton, recordStopButton;
     AlertDialog statusDialog;
     private AlertDialog settingsDialog;
@@ -169,7 +170,7 @@ public class MainActivity extends Activity implements LocationListener {
         });
         debugDialog.show(); updateBrightness(); refreshDebug();
     }
-    private String status = "TAP TO ENABLE GPS";
+    private String status = "Enable GPS";
     private float accuracy;
     private long demoStart;
     private long greetingUntil;
@@ -263,12 +264,12 @@ public class MainActivity extends Activity implements LocationListener {
     private void stopGps() { if (subscribed) { manager.removeUpdates(this); subscribed = false; } }
     private void startGps() {
         stopGps();
-        if (!permitted()) { status = "TAP TO ENABLE PRECISE LOCATION"; return; }
-        if (!manager.getAllProviders().contains(LocationManager.GPS_PROVIDER)) { status = "GPS HARDWARE UNAVAILABLE"; return; }
-        if (!manager.isProviderEnabled(LocationManager.GPS_PROVIDER)) { status = "GPS OFF · TAP TO OPEN SETTINGS"; return; }
-        status = "SEARCHING FOR SATELLITES";
+        if (!permitted()) { status = "Enable precise location"; return; }
+        if (!manager.getAllProviders().contains(LocationManager.GPS_PROVIDER)) { status = "GPS unavailable"; return; }
+        if (!manager.isProviderEnabled(LocationManager.GPS_PROVIDER)) { status = "GPS off · Settings"; return; }
+        status = "GPS searching";
         try { manager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 500, 0, this, Looper.getMainLooper()); subscribed = true; }
-        catch (SecurityException e) { status = "TAP TO ENABLE PRECISE LOCATION"; }
+        catch (SecurityException e) { status = "Enable precise location"; }
     }
     private void action() {
         if (demo) { demo = false; reading.clear(); startGps(); return; }
@@ -359,10 +360,10 @@ public class MainActivity extends Activity implements LocationListener {
         long now = SystemClock.elapsedRealtime();
         boolean accepted = location.hasAccuracy() && reading.accept(location.getSpeed(), location.hasSpeed(), location.getAccuracy(),
             location.hasSpeedAccuracy(), location.getSpeedAccuracyMetersPerSecond(), location.getElapsedRealtimeNanos()/1000000L, now);
-        if (accepted) { accuracy = location.getAccuracy(); status = "GPS CONNECTED"; drivePeak.observe(reading.mph(), true, now); savePeak(); }
-        else if (!reading.fresh(now)) { status = "WAITING FOR RELIABLE GPS SPEED"; }
+        if (accepted) { accuracy = location.getAccuracy(); status = "GPS connected"; drivePeak.observe(reading.mph(), true, now); savePeak(); }
+        else if (!reading.fresh(now)) { status = "GPS waiting for a fix"; }
     }
-    @Override public void onProviderDisabled(String provider) { reading.clear(); status = "GPS OFF · TAP TO OPEN SETTINGS"; }
+    @Override public void onProviderDisabled(String provider) { reading.clear(); status = "GPS off · Settings"; }
     @Override public void onProviderEnabled(String provider) { if (active && !demo) startGps(); }
     @Override public void onStatusChanged(String provider, int value, Bundle extras) {}
 
@@ -448,16 +449,29 @@ public class MainActivity extends Activity implements LocationListener {
         if (landscape) panel.setPadding(dp(16),0,0,0);
         body.addView(panel,landscape ? new LinearLayout.LayoutParams(0,-1,1) : new LinearLayout.LayoutParams(-1,0,1));
         if (landscape) panel.addView(header(),new LinearLayout.LayoutParams(-1,dp(56)));
-        speedText=label(landscape ? 84 : 100,0xff72efff);
-        speedText.setTypeface(Typeface.create("sans-serif-condensed",Typeface.NORMAL));
-        if (Build.VERSION.SDK_INT >= 26) speedText.setAutoSizeTextTypeUniformWithConfiguration(36,landscape?100:120,2,android.util.TypedValue.COMPLEX_UNIT_SP);
-        panel.addView(speedText,new LinearLayout.LayoutParams(-1,0,1));
-        sourceText=label(13,0xffa9bacb);
-        panel.addView(sourceText,new LinearLayout.LayoutParams(-1,dp(24)));
-        gpsButton=button("Enable GPS",new View.OnClickListener() { public void onClick(View view) { gpsAction(); refreshDashboard(SystemClock.elapsedRealtime()); }});
-        gpsButton.setTextSize(13); gpsButton.setTag("gps-control");
-        LinearLayout.LayoutParams gpsParams=new LinearLayout.LayoutParams(-1,dp(52)); gpsParams.setMargins(0,dp(4),0,dp(4));
-        panel.addView(gpsButton,gpsParams);
+        speedDisplay = new DigitalSpeedView(this);
+        speedDisplay.setTag("digital-speed");
+        panel.addView(speedDisplay, new LinearLayout.LayoutParams(-1, 0, 1));
+
+        LinearLayout speedDetails = row();
+        speedDetails.setGravity(Gravity.CENTER);
+        sourceText = label(13, 0xffa9bacb);
+        speedDetails.addView(sourceText, new LinearLayout.LayoutParams(-2, -2));
+        gpsButton = new Button(this, null, android.R.attr.borderlessButtonStyle);
+        gpsButton.setAllCaps(false);
+        gpsButton.setTypeface(Typeface.create("sans-serif", Typeface.NORMAL));
+        gpsButton.setTextSize(11);
+        gpsButton.setTextColor(0xff8a9dad);
+        gpsButton.setMinimumWidth(0);
+        gpsButton.setMinWidth(0);
+        gpsButton.setPadding(dp(8), 0, dp(8), 0);
+        gpsButton.setSingleLine(true);
+        gpsButton.setTag("gps-control");
+        gpsButton.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View view) { gpsAction(); refreshDashboard(SystemClock.elapsedRealtime()); }
+        });
+        speedDetails.addView(gpsButton, new LinearLayout.LayoutParams(-2, -1));
+        panel.addView(speedDetails, new LinearLayout.LayoutParams(-1, dp(48)));
         LinearLayout controls=row();
         LinearLayout cameraState=new LinearLayout(this); cameraState.setOrientation(LinearLayout.VERTICAL); cameraState.setGravity(Gravity.CENTER);
         recordingText = label(13, 0xffa9bacb); recordingText.setTag("camera-state"); recordingText.setSingleLine(true);
@@ -520,17 +534,15 @@ public class MainActivity extends Activity implements LocationListener {
         recordStopButton.setEnabled(cameraRunning);
         recordingText.setContentDescription(recording ? "Dashcam recording" : DashcamService.running() ? "Dashcam starting or waiting for video" : "Dashcam not recording");
         int ink=skin == DashboardSkin.INTEGRA ? 0xfff0eee4 : skin.ink;
-        speedText.setTextColor(ink);
-        setText(speedText,valid?String.format(Locale.US,"%.0f",speed):"—");
-        speedText.setContentDescription(valid?String.format(Locale.US,"%.0f miles per hour",speed):"Speed unavailable");
-        setText(sourceText,demo?"mph  /  Simulated speed":"mph  /  GPS speed");
-        sourceText.setTextColor(demo?0xffffb15e:0xffa9bacb);
+        speedDisplay.update(valid ? String.format(Locale.US, "%.0f", speed) : "", ink);
+        setText(sourceText, demo ? "mph · Demo" : "mph");
+        sourceText.setTextColor(demo ? 0xffffb15e : 0xffa9bacb);
         setText(demoButton,demo?"Exit demo":"Demo");
         demoButton.setVisibility(demo||driveSession.demoVisible()?View.VISIBLE:View.INVISIBLE);
-        String label=demo?"Return to live GPS":fresh?String.format(Locale.US,"GPS connected · ±%.0f m",accuracy):status.equals("GPS CONNECTED")?"Signal lost · Waiting for GPS":status;
+        String label = demo ? "Return to live GPS" : fresh ? String.format(Locale.US, "GPS · ±%.0f m", accuracy) :
+            status.equals("GPS connected") ? "GPS signal lost" : status;
         setText(gpsButton,label);
         gpsButton.setContentDescription(demo ? "Return to live GPS" : fresh ? "GPS connected. Tap for GPS status." : "GPS unavailable. Tap to enable or retry.");
-        gpsButton.setTextColor(demo?0xffffb15e:fresh?0xffb4efdb:0xffe4edf7);
         setText(footerText,now<greetingUntil?DriveAudio.GREETING:demo?"Display preview only":fresh?(powered?"External power connected":"Running on battery"):"Use outdoors with a clear view of the sky");
         if (demo && valid && Double.isFinite(speed) && speed >= 0) demoMaximum=Math.max(demoMaximum,speed);
         dial.update(skin,speed,valid,demo ? demoMaximum : drivePeak.maximumMph(),demo,now);
