@@ -1,1 +1,1 @@
-Larger seven-segment speed digits and a quieter GPS status.
+Tap Demo to meet a pixel-art Shiba Inu that sits, tilts its head, and curls up to sleep.

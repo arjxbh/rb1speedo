@@ -19,6 +19,7 @@ import android.net.Uri;
 import android.view.*;
 import android.widget.Toast;
 import android.widget.LinearLayout;
+import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Button;
 import android.widget.ScrollView;
@@ -32,6 +33,9 @@ public class MainActivity extends Activity implements LocationListener {
     private DashboardDial dial;
     private LinearLayout dashboard;
     private DigitalSpeedView speedDisplay;
+    private ImageView shiba;
+    private final int[] shibaPoses = new int[3];
+    private int currentShibaPose = -1;
     private TextView sourceText, footerText, carText, recordingText, cameraDetailText;
     private Button settingsButton, demoButton, gpsButton, recordStartButton, recordStopButton;
     AlertDialog statusDialog;
@@ -411,9 +415,38 @@ public class MainActivity extends Activity implements LocationListener {
         carText.setAutoSizeTextTypeUniformWithConfiguration(12,18,1,android.util.TypedValue.COMPLEX_UNIT_SP);
         carText.setTypeface(Typeface.create("sans-serif-condensed",Typeface.BOLD));
         header.addView(carText,new LinearLayout.LayoutParams(0,dp(56),1));
+        shiba = new ImageView(this);
+        shiba.setTag("demo-shiba");
+        shiba.setVisibility(View.GONE);
+        shiba.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        String[] names = {"shiba_sit", "shiba_tilt", "shiba_sleep"};
+        for (int i = 0; i < names.length; i++)
+            shibaPoses[i] = getResources().getIdentifier(names[i], "drawable", getPackageName());
+        header.addView(shiba, new LinearLayout.LayoutParams(dp(40), dp(40)));
         settingsButton = button("Settings",new View.OnClickListener() { public void onClick(View view) { openSettings(); }});
         header.addView(settingsButton,new LinearLayout.LayoutParams(dp(100),dp(48)));
         return header;
+    }
+    private void updateShiba(long now) {
+        if (!demo) {
+            if (currentShibaPose >= 0) {
+                shiba.setVisibility(View.GONE);
+                currentShibaPose = -1;
+            }
+            return;
+        }
+        long phase = (now - demoStart) % 12000;
+        int pose = 0;
+        if (phase >= 1800 && phase < 3200) pose = 1;
+        else if (phase >= 7800) pose = 2;
+        if (currentShibaPose == pose) return;
+        currentShibaPose = pose;
+        shiba.setImageResource(shibaPoses[pose]);
+        android.graphics.drawable.Drawable sprite = shiba.getDrawable();
+        if (sprite instanceof android.graphics.drawable.BitmapDrawable)
+            ((android.graphics.drawable.BitmapDrawable) sprite).setFilterBitmap(false);
+        shiba.setContentDescription(pose == 2 ? "Sleeping Shiba Inu" : pose == 1 ? "Shiba Inu tilting its head" : "Seated Shiba Inu");
+        shiba.setVisibility(View.VISIBLE);
     }
     private void toggleDemo() {
         if (!demo && !driveSession.demoVisible()) return;
@@ -534,6 +567,7 @@ public class MainActivity extends Activity implements LocationListener {
         recordStopButton.setEnabled(cameraRunning);
         recordingText.setContentDescription(recording ? "Dashcam recording" : DashcamService.running() ? "Dashcam starting or waiting for video" : "Dashcam not recording");
         int ink=skin == DashboardSkin.INTEGRA ? 0xfff0eee4 : skin.ink;
+        updateShiba(now);
         speedDisplay.update(valid ? String.format(Locale.US, "%.0f", speed) : "", ink);
         setText(sourceText, demo ? "mph · Demo" : "mph");
         sourceText.setTextColor(demo ? 0xffffb15e : 0xffa9bacb);
