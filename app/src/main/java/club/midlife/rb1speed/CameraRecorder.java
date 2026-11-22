@@ -14,15 +14,22 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
-import java.io.File;
+
 
 /** One continuous hardware encoder, with MP4 fragments cut only at sync frames. */
 final class CameraRecorder {
     interface Listener { void stopped(String reason, String retryCamera); void written(); }
+    private static final long AUDIO_DRAIN_MS = 150;
     private final Context context;
     private final ClipStore store;
     private final Listener listener;
-    private final boolean recording;
+    private final boolean recording, recordAudio;
+    private DashcamAudio audio;
+    private int audioTrack;
+    private long audioReadyBy, videoEndedAt, boundaryDeadline;
+    private final MediaCodec.BufferInfo videoInfo = new MediaCodec.BufferInfo();
+    private int pendingVideo = -1;
+    private boolean audioUnavailable;
     private final Set<String> rejected;
     private CameraCatalog.Option selected;
     private boolean front;
@@ -43,8 +50,8 @@ final class CameraRecorder {
     private boolean closing, finished, started, opening;
     private Range<Integer> frameRange;
     private boolean continuousFocus;
-    CameraRecorder(Context context, boolean recording, Set<String> rejected, Listener listener) {
-        this.context = context; this.recording = recording; this.rejected = rejected; this.listener = listener; store = ClipStore.get(context);
+    CameraRecorder(Context context, boolean recording, boolean recordAudio, Set<String> rejected, Listener listener) {
+        this.context = context; this.recording = recording; this.recordAudio = recordAudio; this.rejected = rejected; this.listener = listener; store = ClipStore.get(context);
     }
     CameraRecorder facing(boolean front) { this.front = front; return this; }
     void preview(CameraPreviewFrames.Listener listener) {
@@ -124,6 +131,13 @@ final class CameraRecorder {
                     throw new IllegalStateException("Hardware video encoder unavailable");
                 encoder.configure(config, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
                 surface = encoder.createInputSurface(); encoder.start(); started = true; wall = System.currentTimeMillis();
+            }
+            if (recordAudio) {
+                audio = new DashcamAudio();
+                try {
+                    audio.start();
+                    audioReadyBy = SystemClock.elapsedRealtime() + 2000;
+                } catch (Exception e) { disableAudio(); }
             }
             opening = true;
             manager.openCamera(selected.openId, new CameraDevice.StateCallback() {
@@ -206,34 +220,80 @@ final class CameraRecorder {
         if (encoder != null && started) try { encoder.signalEndOfInputStream(); } catch (RuntimeException ignored) {}
         if (!started) finish();
     }
+    private void disableAudio() {
+        audio.close();
+        audio = null;
+        audioUnavailable = true;
+    }
+
     private final Runnable drain = new Runnable() { public void run() {
         if (finished) return;
         try {
-            MediaCodec.BufferInfo info = new MediaCodec.BufferInfo();
+            if (audio != null) {
+                try { audio.poll(); }
+                catch (Exception e) {
+                    if (mux != null) {
+                        reason = "Microphone recording failed";
+                        finish();
+                        return;
+                    }
+                    disableAudio();
+                }
+                if (audio != null && audio.format == null && SystemClock.elapsedRealtime() >= audioReadyBy) disableAudio();
+            }
+            if (videoEndedAt != 0) {
+                if (SystemClock.elapsedRealtime() >= videoEndedAt + AUDIO_DRAIN_MS) { finish(); return; }
+                handler.postDelayed(this, 10);
+                return;
+            }
+            MediaCodec.BufferInfo info = videoInfo;
             for (int i = 0; i < 12; i++) {
-                int index = encoder.dequeueOutputBuffer(info, 0);
+                int index = pendingVideo >= 0 ? pendingVideo : encoder.dequeueOutputBuffer(info, 0);
                 if (index == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) { format = encoder.getOutputFormat(); continue; }
                 if (index < 0) break;
+                // Let AAC catch up before committing a keyframe boundary to disk.
+                if (audio != null && audio.format != null && info.size > 0 &&
+                    (info.flags & MediaCodec.BUFFER_FLAG_KEY_FRAME) != 0 &&
+                    (origin < 0 || fragmentBoundary(info.presentationTimeUs)) && !audio.reached(info.presentationTimeUs)) {
+                    long now = SystemClock.elapsedRealtime();
+                    if (pendingVideo < 0) boundaryDeadline = now + AUDIO_DRAIN_MS;
+                    if (now < boundaryDeadline) {
+                        pendingVideo = index;
+                        handler.postDelayed(this, 10);
+                        return;
+                    }
+                }
+                pendingVideo = -1;
                 try {
                     if (info.size > 0 && (info.flags & MediaCodec.BUFFER_FLAG_CODEC_CONFIG) == 0) sample(encoder.getOutputBuffer(index), info);
-                    if ((info.flags & MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) { finish(); return; }
+                    if ((info.flags & MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) {
+                        if (audio == null || mux == null) { finish(); return; }
+                        videoEndedAt = SystemClock.elapsedRealtime();
+                        handler.postDelayed(this, 10);
+                        return;
+                    }
                 } finally { if (!finished) encoder.releaseOutputBuffer(index, false); }
             }
+            if (audio != null && mux != null) audio.writeBefore(mux, audioTrack, fragmentStart, lastSample);
             if (closing && SystemClock.elapsedRealtime() >= stopDeadline) { finish(); return; }
             handler.postDelayed(this, 10);
         } catch (Exception e) { reason = "Recording failed: " + e.getClass().getSimpleName(); finish(); }
     }};
+    private boolean fragmentBoundary(long pts) {
+        return pts - fragmentStart >= DashcamPolicy.FRAGMENT_US || pts - groupStart >= DashcamPolicy.CLIP_US;
+    }
+
     private void sample(ByteBuffer data, MediaCodec.BufferInfo info) throws Exception {
         if (closing && mux == null) return;
         boolean keyframe = (info.flags & MediaCodec.BUFFER_FLAG_KEY_FRAME) != 0;
-        if (origin < 0) { if (!keyframe) return; origin = info.presentationTimeUs; wall = System.currentTimeMillis();
-            DashcamService.report(context, "Recording " + (front ? "front" : "rear") + " camera · 1080p / H.264");
+        if (origin < 0) { if (!keyframe || (audio != null && audio.format == null)) return; origin = info.presentationTimeUs; wall = System.currentTimeMillis();
+            DashcamService.report(context, "Recording " + (front ? "front" : "rear") + " camera · 1080p / H.264" +
+                (audio != null ? " · microphone on" : audioUnavailable ? " · microphone unavailable" : " · microphone off"));
             context.getSharedPreferences("dashcam", 0).edit().putLong("recordingStarted", wall).apply(); }
         long pts = info.presentationTimeUs;
         if (mux == null) {
             clip = store.beginClip(wall + (pts - origin) / 1000); groupStart = pts; openFragment(pts);
-        } else if (DashcamPolicy.cut(pts - fragmentStart, keyframe, DashcamPolicy.FRAGMENT_US) ||
-            DashcamPolicy.cut(pts - groupStart, keyframe, DashcamPolicy.CLIP_US)) {
+        } else if (keyframe && fragmentBoundary(pts)) {
             closeFragment(pts);
             if (DashcamPolicy.cut(pts - groupStart, true, DashcamPolicy.CLIP_US)) {
                 store.seal(clip); ClipAssembler.enqueue(context, false);
@@ -253,15 +313,18 @@ final class CameraRecorder {
     private void openFragment(long pts) throws Exception {
         fragment = store.beginFragment(clip); fragmentStart = pts;
         mux = new MediaMuxer(store.fragmentFile(fragment).getAbsolutePath(), MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4);
-        mux.setOrientationHint(orientation); track = mux.addTrack(format); mux.start();
+        mux.setOrientationHint(orientation); track = mux.addTrack(format);
+        if (audio != null) audioTrack = mux.addTrack(audio.format);
+        mux.start();
     }
     private void closeFragment(long end) {
         if (mux == null) return;
         MediaMuxer current = mux; mux = null;
         try {
-            current.stop(); current.release();
+            if (audio != null) audio.writeBefore(current, audioTrack, fragmentStart, end);
+            current.stop();
             store.finishFragment(fragment, Math.max(33333, end - fragmentStart));
-        } catch (RuntimeException e) { try { current.release(); } catch (RuntimeException ignored) {} throw e; }
+        } finally { current.release(); }
     }
     private void finish() {
         if (finished) return; finished = true;
@@ -269,6 +332,7 @@ final class CameraRecorder {
         if (session != null) session.close(); if (camera != null) camera.close();
         try { closeFragment(lastSample + 33333); }
         catch (RuntimeException e) { reason = "Final fragment could not be finalized"; }
+        if (audio != null) audio.close();
         if (clip != null) store.seal(clip);
         if (encoder != null) { try { if (started) encoder.stop(); } catch (RuntimeException ignored) {} encoder.release(); }
         if (surface != null) surface.release();

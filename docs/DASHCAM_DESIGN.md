@@ -14,7 +14,7 @@ Implemented defaults (recording is opt-in):
 | --- | --- |
 | Camera | Rear primary camera, landscape, hardware H.264 encoder |
 | Video | 1080p, 30 fps, target 8 Mbit/s, MP4 |
-| Microphone | Off; audio recording would be a separate opt-in |
+| Microphone | Off by default; opt-in mono AAC with microphone permission |
 | Clip duration | 15 minutes; shorter final clip at end of trip |
 | Recording start | App visible, dashcam enabled, camera permission granted, external power connected |
 | Recording stop | Manual stop, permission/camera error, thermal protection, or 10 seconds continuously on battery |
@@ -166,7 +166,7 @@ Piggy Ledger's repository documents a shared t3.micro host with Caddy and four p
 
 Debug additions should expose recording state/time, camera/encoder, last finalized clip, free disk/quota, protected and unsynced bytes, oldest pending clip, upload network/progress/last verification, battery budget, and thermal/camera errors. Never display tokens or full presigned URLs.
 
-The implementation uses S3 Standard, the disclosed opt-in local loop policy, 30-day routine cloud retention, no microphone, and visible-app camera startup. Reboot schedules uploads and offers a dashboard-open notification when notifications are permitted; it never launches a camera foreground service from boot. The recommended first scope excludes live streaming, parking surveillance, dual cameras, cloud transcoding, GPS overlays, and a web gallery.
+The implementation uses S3 Standard, the disclosed opt-in local loop policy, 30-day routine cloud retention, opt-in microphone audio, and visible-app camera startup. Reboot schedules uploads and offers a dashboard-open notification when notifications are permitted; it never launches a camera foreground service from boot. The recommended first scope excludes live streaming, parking surveillance, dual cameras, cloud transcoding, GPS overlays, and a web gallery.
 
 ## Sources
 

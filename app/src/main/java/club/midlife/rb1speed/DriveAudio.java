@@ -4,11 +4,6 @@ import android.content.Context;
 import android.media.*;
 import android.os.Handler;
 import android.os.Looper;
-import android.os.SystemClock;
-import android.speech.tts.TextToSpeech;
-import android.speech.tts.UtteranceProgressListener;
-import android.speech.tts.Voice;
-import java.util.Set;
 
 /** Best-effort foreground audio. No network or background playback. */
 final class DriveAudio {
@@ -23,11 +18,11 @@ final class DriveAudio {
     private final AudioManager manager;
     private final AudioFocusRequest focus;
     private AudioTrack chime;
-    private TextToSpeech speech;
+    private MediaPlayer greeting;
     private boolean active, focused, focusLost, pendingGreeting, closed, chimePlaying;
-    private long greetingAt, greetingDeadline;
+    private String greetingStatus = "idle";
     private final Runnable speakGreeting = new Runnable() {
-        @Override public void run() { prepareGreeting(TextToSpeech.SUCCESS); }
+        @Override public void run() { playGreeting(); }
     };
     private final Runnable finishChime = new Runnable() {
         @Override public void run() { stopChime(); }
@@ -43,8 +38,7 @@ final class DriveAudio {
                     if (change < 0) {
                         focusLost = true; cancelGreeting();
                         handler.removeCallbacks(finishChime); stopChime();
-                        if (speech != null) speech.stop();
-                        if (change == AudioManager.AUDIOFOCUS_LOSS) abandonFocus();
+                        abandonFocus();
                     } else if (change == AudioManager.AUDIOFOCUS_GAIN) { focusLost = false; focused = true; }
                 }
             }, handler).build();
@@ -82,57 +76,55 @@ final class DriveAudio {
             (maximum > 0 ? Math.round(100f * current / maximum) : 0) + "%)" +
             "\n70% target: step " + Math.round(maximum * .7f) +
             "\nFixed volume: " + (manager.isVolumeFixed() ? "yes" : "no") +
-            "\nGreeting: " + (pendingGreeting ? "waiting for five-second delay / offline voice" : "no speech pending");
+            "\nGreeting: " + greetingStatus;
     }
 
     void resume(boolean greet) {
         active = true; focusLost = false;
         if (greet) {
+            cancelGreeting();
             pendingGreeting = true;
-            greetingAt = SystemClock.elapsedRealtime() + GREETING_DELAY_MS;
-            greetingDeadline = greetingAt + 6000;
-            if (speech != null) speech.shutdown();
-            speech = new TextToSpeech(context, new TextToSpeech.OnInitListener() {
-                @Override public void onInit(final int result) {
-                    handler.post(new Runnable() { @Override public void run() { prepareGreeting(result); } });
-                }
-            });
+            greetingStatus = "waiting for five-second delay";
+            handler.postDelayed(speakGreeting, GREETING_DELAY_MS);
         }
     }
 
-    private void prepareGreeting(int result) {
-        if (closed || !active || !pendingGreeting || SystemClock.elapsedRealtime() >= greetingDeadline ||
-            speech == null || result != TextToSpeech.SUCCESS) { pendingGreeting = false; return; }
-        long delay = greetingAt - SystemClock.elapsedRealtime();
-        if (delay > 0) {
-            handler.removeCallbacks(speakGreeting);
-            handler.postDelayed(speakGreeting, delay);
+    private void playGreeting() {
+        if (closed || !active || !pendingGreeting) return;
+        pendingGreeting = false;
+        if (!requestFocus()) {
+            greetingStatus = "audio focus unavailable";
             return;
         }
-        Set<Voice> voices = speech.getVoices();
-        Voice selected = null;
-        if (voices != null) for (Voice voice : voices) {
-            if ("ja".equals(voice.getLocale().getLanguage()) && !voice.isNetworkConnectionRequired() &&
-                (voice.getFeatures() == null || !voice.getFeatures().contains(TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED)) &&
-                (selected == null || voice.getQuality() > selected.getQuality())) selected = voice;
-        }
-        pendingGreeting = false;
-        if (selected == null || speech.setVoice(selected) != TextToSpeech.SUCCESS || !requestFocus()) return;
-        speech.setAudioAttributes(ATTRIBUTES);
-        speech.setOnUtteranceProgressListener(new UtteranceProgressListener() {
-            @Override public void onStart(String id) {}
-            @Override public void onDone(String id) {
-                handler.post(new Runnable() { @Override public void run() { if (!chimePlaying && !focusLost) abandonFocus(); } });
+        try {
+            // The standalone APK build compiles Java before Android resources are linked.
+            int resource = context.getResources().getIdentifier("startup_greeting", "raw", context.getPackageName());
+            if (resource != 0) greeting = MediaPlayer.create(context, resource, ATTRIBUTES, AudioManager.AUDIO_SESSION_ID_GENERATE);
+            if (greeting == null) {
+                finishGreeting("audio unavailable");
+                return;
             }
-            @Override public void onError(String id) { onDone(id); }
-        });
-        if (speech.speak(GREETING, TextToSpeech.QUEUE_FLUSH, null, "safe-drive") == TextToSpeech.ERROR) abandonFocus();
+            greeting.setOnCompletionListener(new MediaPlayer.OnCompletionListener() {
+                @Override public void onCompletion(MediaPlayer player) {
+                    if (player == greeting) finishGreeting("played");
+                }
+            });
+            greeting.setOnErrorListener(new MediaPlayer.OnErrorListener() {
+                @Override public boolean onError(MediaPlayer player, int what, int extra) {
+                    if (player == greeting) finishGreeting("playback error (" + what + "/" + extra + ")");
+                    return true;
+                }
+            });
+            greeting.start();
+            greetingStatus = "playing";
+        } catch (RuntimeException e) {
+            finishGreeting("playback failed: " + e.getClass().getSimpleName());
+        }
     }
 
     void playChime() {
         if (!active || closed) return;
         cancelGreeting();
-        if (speech != null) speech.stop();
         // Release any greeting focus, then mix the bell without asking music to duck.
         abandonFocus();
         if (chime == null) return;
@@ -154,7 +146,7 @@ final class DriveAudio {
     }
 
     private boolean requestFocus() {
-        if (!active || closed || focusLost) return false;
+        if (!active || closed || focusLost || manager == null) return false;
         if (!focused) focused = manager.requestAudioFocus(focus) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED;
         return focused;
     }
@@ -170,10 +162,18 @@ final class DriveAudio {
         cancelGreeting();
         handler.removeCallbacks(finishChime);
         stopChime();
-        if (speech != null) speech.stop();
+        abandonFocus();
+    }
+    private void finishGreeting(String status) {
+        greetingStatus = status;
+        if (greeting != null) {
+            greeting.release();
+            greeting = null;
+        }
         abandonFocus();
     }
     private void cancelGreeting() {
+        if (pendingGreeting || greeting != null) finishGreeting("cancelled");
         pendingGreeting = false;
         handler.removeCallbacks(speakGreeting);
     }
@@ -181,6 +181,5 @@ final class DriveAudio {
     void close() {
         closed = true; pause();
         if (chime != null) { chime.release(); chime = null; }
-        if (speech != null) { speech.shutdown(); speech = null; }
     }
 }

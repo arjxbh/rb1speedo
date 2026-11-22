@@ -131,6 +131,8 @@ public class MainActivity extends Activity implements LocationListener {
             "\nGreeting used this screen session: " + (greetingShown ? "yes" : "no") +
             "\n\nLight sensor: " + sensor + "\nBrightness source: " + brightnessSource +
             "\nRequested app brightness: " + (output < 0 ? "Android system setting" : Math.round(output * 100) + "%") +
+            "\n\nDrive peak: " + (drivePeak.active() ? String.format(Locale.US, "%.0f mph", drivePeak.maximumMph()) :
+                "waiting for live GPS speed above 1 mph") +
             "\n\nDashcam: " + getSharedPreferences("dashcam", 0).getString("cameraStatus", "not started") +
             "\nUploads: " + getSharedPreferences("dashcam", 0).getString("uploadStatus", "not started") +
             "\n\nBrightness is an app request, not a measurement of panel output. Tests return to automatic control after five seconds.\n" +
@@ -181,8 +183,14 @@ public class MainActivity extends Activity implements LocationListener {
                 boolean live = !demo && reading.fresh(now);
                 driveSession.update(reading.mph(), live, now);
                 drivePeak.observe(reading.mph(), live, now); savePeak();
-                if (speedWarning.update(speedAt(now), demo || live, now)) audio.playChime();
-                if (!speedWarning.active()) audio.cancelChime();
+                if (speedWarning.update(speedAt(now), demo || live, now)) {
+                    dial.pulseWarning(now);
+                    audio.playChime();
+                }
+                if (!speedWarning.active()) {
+                    dial.clearWarningPulse();
+                    audio.cancelChime();
+                }
                 refreshDashboard(now); handler.postDelayed(this, 33);
             }
         }
@@ -201,7 +209,7 @@ public class MainActivity extends Activity implements LocationListener {
         bootCount = Settings.Global.getInt(getContentResolver(), Settings.Global.BOOT_COUNT, -1);
         android.content.SharedPreferences peakPreferences = getSharedPreferences("drivePeak", 0);
         if (bootCount >= 0 && peakPreferences.getInt("boot", -2) == bootCount)
-            drivePeak.restore(Double.longBitsToDouble(peakPreferences.getLong("maximum", Double.doubleToLongBits(-1))), peakPreferences.getBoolean("active", false), peakPreferences.getBoolean("armed", false));
+            drivePeak.restore(Double.longBitsToDouble(peakPreferences.getLong("maximum", Double.doubleToLongBits(-1))), peakPreferences.getBoolean("active", false));
         sensors = (SensorManager)getSystemService(SENSOR_SERVICE);
         IntentFilter powerFilter = new IntentFilter(Intent.ACTION_BATTERY_CHANGED);
         powerFilter.addAction(Intent.ACTION_SCREEN_OFF);
@@ -238,7 +246,7 @@ public class MainActivity extends Activity implements LocationListener {
         attributes.screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE;
         getWindow().setAttributes(attributes);
         drivePeak.observe(0, false, SystemClock.elapsedRealtime()); savePeak();
-        speedWarning.reset(); stopGps(); reading.clear(); super.onPause();
+        speedWarning.reset(); dial.clearWarningPulse(); stopGps(); reading.clear(); super.onPause();
     }
     @Override public void onDestroy() { unregisterReceiver(powerReceiver); audio.close(); super.onDestroy(); }
     @Override public void onSaveInstanceState(Bundle state) {
@@ -249,7 +257,7 @@ public class MainActivity extends Activity implements LocationListener {
         savedPeakRevision = drivePeak.revision();
         getSharedPreferences("drivePeak", 0).edit().putInt("boot", bootCount)
             .putLong("maximum", Double.doubleToLongBits(drivePeak.maximumMph()))
-            .putBoolean("active", drivePeak.active()).putBoolean("armed", drivePeak.armed()).apply();
+            .putBoolean("active", drivePeak.active()).apply();
     }
     private boolean permitted() { return checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED; }
     private void stopGps() { if (subscribed) { manager.removeUpdates(this); subscribed = false; } }
@@ -408,7 +416,7 @@ public class MainActivity extends Activity implements LocationListener {
     }
     private void toggleDemo() {
         if (!demo && !driveSession.demoVisible()) return;
-        demo=!demo; reading.clear(); speedWarning.reset(); audio.cancelChime();
+        demo=!demo; reading.clear(); speedWarning.reset(); dial.clearWarningPulse(); audio.cancelChime();
         if (demo) { demoMaximum = -1; stopGps(); demoStart=SystemClock.elapsedRealtime(); } else startGps();
         refreshDashboard(SystemClock.elapsedRealtime());
     }

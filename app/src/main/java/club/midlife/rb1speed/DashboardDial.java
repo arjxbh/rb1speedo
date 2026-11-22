@@ -1,11 +1,20 @@
 package club.midlife.rb1speed;
 
+import android.animation.ValueAnimator;
 import android.content.Context;
 import android.graphics.*;
 import android.view.View;
 
 /** Gauge artwork only. Android views own the controls and digital readout. */
 final class DashboardDial extends View {
+    private static final long WARNING_PULSE_MS = 950;
+    private static final float WARNING_RING_RADIUS = 438f;
+    private final RadialGradient warningRing = new RadialGradient(0, 0, WARNING_RING_RADIUS,
+        new int[]{0x00ffac46, 0xeeffc374, 0x60ffac46, 0x00ffac46},
+        new float[]{.968f, .982f, .991f, 1f}, Shader.TileMode.CLAMP);
+    private final Matrix warningRingMatrix = new Matrix();
+    private long warningPulseAt = -1;
+    private boolean animateWarningPulse;
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final RectF arc = new RectF(-375,-375,375,375);
     private final Path pointer = new Path();
@@ -40,6 +49,28 @@ final class DashboardDial extends View {
         needle+=(target-needle)*(1-(float)Math.exp(-dt/.13f));
         invalidate();
     }
+    void pulseWarning(long now) {
+        warningPulseAt = now;
+        animateWarningPulse = ValueAnimator.areAnimatorsEnabled();
+    }
+    void clearWarningPulse() { warningPulseAt = -1; }
+
+    private void drawWarningPulse(Canvas canvas) {
+        long elapsed = previous - warningPulseAt;
+        if (warningPulseAt < 0 || elapsed < 0 || elapsed >= WARNING_PULSE_MS) return;
+        float progress = elapsed / (float) WARNING_PULSE_MS;
+        float remaining = 1f - progress;
+        float radius = WARNING_RING_RADIUS + (animateWarningPulse ? 11f * (1f - remaining * remaining) : 0f);
+        float opacity = Math.min(1f, elapsed / 100f) * remaining * remaining;
+        float scale = radius / WARNING_RING_RADIUS;
+        warningRingMatrix.setScale(scale, scale);
+        warningRing.setLocalMatrix(warningRingMatrix);
+        reset(0xffffffff);
+        paint.setShader(warningRing);
+        paint.setAlpha(Math.round(174f * opacity));
+        canvas.drawCircle(0, 0, radius, paint);
+    }
+
     private void discardFace() {
         if (face != null) { face.recycle(); face=null; }
     }
@@ -119,6 +150,7 @@ final class DashboardDial extends View {
         }
         canvas.drawBitmap(face,0,0,null);
         canvas.save(); canvas.translate(width/2f,height/2f); canvas.scale(scale,scale);
+        drawWarningPulse(canvas);
         if (valid) {
             canvas.save(); canvas.rotate(skin.start+needle*skin.sweep/120);
             reset(0x99000000); paint.setShadowLayer(6,0,8,0x99000000);

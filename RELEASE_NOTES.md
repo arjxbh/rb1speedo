@@ -1,3 +1,10 @@
+Dashcam audio and dashboard alerts (1.6.12).
+
+- Opt in to microphone audio in **Settings → Camera & clips**. Grant microphone permission and start a new recording to include cabin audio in new MP4s, including shared and uploaded copies. Audio is off by default.
+- Play the bundled Japanese startup greeting after five seconds, even on phones without an installed Japanese speech voice. **Settings → Debug** shows greeting playback status.
+- Start tracking the drive's maximum speed on battery or external power after the first valid GPS speed above 1 mph. The three-minute stopped-and-unplugged reset still applies.
+- Show a soft amber ring that expands and fades with each overspeed chime. When Android animations are disabled, the ring fades in place. Preview the effect while parked in **Demo**.
+
 Current-drive maximum speed (1.6.11).
 
 - Add a small outer-scale maximum-speed pointer and Max mph caption across all five skins. Preserve gauge size, artwork, scale and current-speed needle. Use amber on dark faces and blue on the white Integra face.

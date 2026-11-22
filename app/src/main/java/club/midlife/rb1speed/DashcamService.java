@@ -4,6 +4,7 @@ import android.Manifest;
 import android.app.*;
 import android.content.*;
 import android.content.pm.PackageManager;
+import android.content.pm.ServiceInfo;
 import android.os.*;
 import java.util.HashSet;
 import java.util.Set;
@@ -26,7 +27,7 @@ public final class DashcamService extends Service {
     static final String START = "club.midlife.rb1speed.START_CAMERA";
     static final String FLIP = "club.midlife.rb1speed.FLIP_CAMERA";
     private volatile boolean switching, destroyed;
-    private boolean recorderRecording, foreground, stopping;
+    private boolean recorderRecording, foreground, stopping, microphone;
     private CameraPreviewFrames.Listener previewListener;
     private long disconnectAt = -1;
     private final Handler main = new Handler(Looper.getMainLooper());
@@ -70,7 +71,7 @@ public final class DashcamService extends Service {
         if (Build.VERSION.SDK_INT >= 33) registerReceiver(battery, new IntentFilter(Intent.ACTION_BATTERY_CHANGED), Context.RECEIVER_NOT_EXPORTED);
         else registerReceiver(battery, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
     }
-    private void foreground() {
+    private void foreground(boolean recording) {
         if (foreground) return;
         NotificationManager notifications = (NotificationManager)getSystemService(NOTIFICATION_SERVICE);
         notifications.createNotificationChannel(new NotificationChannel("dashcam", "Dashcam recording", NotificationManager.IMPORTANCE_LOW));
@@ -79,7 +80,14 @@ public final class DashcamService extends Service {
         Notification n = new Notification.Builder(this, "dashcam").setSmallIcon(android.R.drawable.presence_video_online)
             .setContentTitle("RB1 dashcam active").setContentText("Camera service running · tap for status")
             .setContentIntent(content).setOngoing(true).addAction(new Notification.Action.Builder(null, "Stop", stop).build()).build();
-        startForeground(81, n); foreground = true;
+        microphone = recording && getSharedPreferences("dashcam", 0).getBoolean("recordAudio", false) &&
+            checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED;
+        if (Build.VERSION.SDK_INT >= 29) {
+            int types = ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA;
+            if (microphone && Build.VERSION.SDK_INT >= 30) types |= ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE;
+            startForeground(81, n, types);
+        } else startForeground(81, n);
+        foreground = true;
         wake = power.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "RB1:camera"); wake.acquire(4 * 60 * 60 * 1000L);
     }
     private void releaseForeground() {
@@ -102,7 +110,7 @@ public final class DashcamService extends Service {
             getSharedPreferences("dashcam", 0).edit().putLong("recordingStarted", 0).apply();
             report(this, "Starting " + (selectedFront ? "front" : "rear") + " camera"); ClipAssembler.enqueue(this, true);
         }
-        recorder = new CameraRecorder(this, recorderRecording, new HashSet<String>(rejectedCameras), new CameraRecorder.Listener() {
+        recorder = new CameraRecorder(this, recorderRecording, recorderRecording && microphone, new HashSet<String>(rejectedCameras), new CameraRecorder.Listener() {
           public void written() { if (!destroyed && running && !switching) lastFrame = SystemClock.elapsedRealtime(); }
           public void stopped(final String reason, final String retryCamera) {
             main.post(new Runnable() { public void run() {
@@ -169,7 +177,7 @@ public final class DashcamService extends Service {
             if (recorder==null) stopSelf();
         } else if (diagnosticsActive) {
             // A queued automatic foreground start must not compete with a diagnostic probe.
-            foreground(); releaseForeground(); stopRecording("Paused for camera diagnostics"); stopSelf();
+            foreground(false); releaseForeground(); stopRecording("Paused for camera diagnostics"); stopSelf();
         } else if (intent != null && STOP.equals(intent.getAction())) {
             getSharedPreferences("dashcam", 0).edit().putBoolean("enabled", false).apply(); stopRecording("Stopped manually");
         } else if (intent != null && FLIP.equals(intent.getAction())) {
@@ -181,7 +189,7 @@ public final class DashcamService extends Service {
                 getSharedPreferences("dashcam", 0).edit().putBoolean("enabled", true).putLong("cameraRetryAfter", 0).apply();
             } else if (!running) selectedFront = false;
             if (!running) rejectedCameras.clear();
-            foreground(); running = true;
+            foreground(true); running = true;
             if (stopping) switching = true;
             reconcile();
             Intent current = registerReceiver(null, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));

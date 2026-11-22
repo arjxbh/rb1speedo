@@ -24,6 +24,7 @@ public final class DashcamActivity extends Activity {
     private TextView previewStatus;
     private Button previewButton;
     private Button cameraButton;
+    private Button audioButton;
     private boolean previewRequested, previewBound, previewHasFrame;
     private long previewFrameAt;
     private DashcamService.PreviewBinder previewService;
@@ -85,9 +86,29 @@ public final class DashcamActivity extends Activity {
         content.addView(preview, new LinearLayout.LayoutParams(-1, Math.round(220 * getResources().getDisplayMetrics().density)));
         previewStatus = new TextView(this); previewStatus.setTextSize(14); content.addView(previewStatus);
         status = new TextView(this); status.setTextSize(15); status.setTextIsSelectable(true); content.addView(status);
+        audioButton = button("Enable microphone for next recording", content, new View.OnClickListener() {
+            public void onClick(View view) {
+                SharedPreferences preferences = getSharedPreferences("dashcam", 0);
+                if (preferences.getBoolean("recordAudio", false) &&
+                    checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                    preferences.edit().putBoolean("recordAudio", false).apply();
+                    showStatus();
+                    return;
+                }
+                new AlertDialog.Builder(DashcamActivity.this).setTitle("Record microphone audio?")
+                    .setMessage("Cabin sound is saved in new clips, including clips shared or uploaded. This setting takes effect the next time recording starts.")
+                    .setPositiveButton("Enable microphone", new DialogInterface.OnClickListener() {
+                        public void onClick(DialogInterface dialog, int which) {
+                            if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED)
+                                requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, 85);
+                            else setAudioEnabled();
+                        }
+                    }).setNegativeButton("Cancel", null).show();
+            }
+        });
         button("Enable recording on external power", content, new View.OnClickListener() { public void onClick(View view) {
             new AlertDialog.Builder(DashcamActivity.this).setTitle("Enable dashcam loop?")
-                .setMessage("Records silent 1080p video while powered. The 32 GiB loop can overwrite the oldest unprotected footage before it uploads. Save incident protects current and surrounding clips. Keep at least 5 GiB free. Camera use and charging generate heat.")
+                .setMessage("Records 1080p video while powered. The 32 GiB loop can overwrite the oldest unprotected footage before it uploads. Save incident protects current and surrounding clips. Keep at least 5 GiB free. Camera use and charging generate heat.")
                 .setPositiveButton("Enable", new DialogInterface.OnClickListener() { public void onClick(DialogInterface d, int which) {
                     getSharedPreferences("dashcam", 0).edit().putBoolean("enabled", true).putLong("cameraRetryAfter", 0).commit();
                     if (checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) requestPermissions(new String[]{Manifest.permission.CAMERA}, 81);
@@ -132,6 +153,10 @@ public final class DashcamActivity extends Activity {
         button("Back to speedometer", content, new View.OnClickListener() { public void onClick(View view) { finish(); }});
         setContentView(scroll); scroll.requestApplyInsets();
     }
+    private void setAudioEnabled() {
+        getSharedPreferences("dashcam", 0).edit().putBoolean("recordAudio", true).apply();
+        showStatus();
+    }
     private void notificationsAndStart() {
         if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
             requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 82);
@@ -144,6 +169,7 @@ public final class DashcamActivity extends Activity {
             if (results.length == 0 || results[0] != PackageManager.PERMISSION_GRANTED) previewRequested = false;
             updatePreview();
         }
+        if (request == 85 && results.length > 0 && results[0] == PackageManager.PERMISSION_GRANTED) setAudioEnabled();
         if (request == 84 && results.length > 0 && results[0] == PackageManager.PERMISSION_GRANTED) chooseCamera();
     }
     @Override public void onResume() {
@@ -188,7 +214,7 @@ public final class DashcamActivity extends Activity {
         }
         previewStatus.setText(previewHasFrame ?
             (DashcamService.recording() ? "● Recording · live aiming preview" : "Live preview · preview alone does not save video") +
-                "\n" + getSharedPreferences("dashcam", 0).getString("activeCamera", "Rear camera") + "\nAlign the horizon with the guides · no microphone." :
+                "\n" + getSharedPreferences("dashcam", 0).getString("activeCamera", "Rear camera") + "\nAlign the horizon with the guides." :
             "Waiting for camera frames · " + getSharedPreferences("dashcam", 0).getString("previewStatus", "Opening rear camera"));
     }
     private void chooseCamera() {
@@ -244,12 +270,15 @@ public final class DashcamActivity extends Activity {
         Intent battery = registerReceiver(null, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
         int percent = battery == null ? 0 : battery.getIntExtra(BatteryManager.EXTRA_LEVEL, 0) * 100 / Math.max(1, battery.getIntExtra(BatteryManager.EXTRA_SCALE, 100));
         float temperature = battery == null ? 0 : battery.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, 0) / 10f;
+        boolean audioEnabled = p.getBoolean("recordAudio", false) &&
+            checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED;
+        audioButton.setText(audioEnabled ? "Disable microphone for next recording" : "Enable microphone for next recording");
         status.setText("Recording: " + (DashcamService.recording() ? "● REC · writing video" : DashcamService.running() ? "waiting for video frames" : "stopped") +
             "\n" + p.getString("cameraStatus", "Not started") + "\nAuto-record: " + (p.getBoolean("enabled", false) ? "enabled" : "disabled") +
             "\nRecording elapsed: " + (DashcamService.running() && p.getLong("recordingStarted", 0) > 0 ? (System.currentTimeMillis() - p.getLong("recordingStarted", 0)) / 1000 + " sec" : "—") +
             "\n" + p.getString("activeCamera", "Rear camera · automatic widest") +
             "\n" + p.getString("cameraSelectionStatus", "Automatic · widest available") +
-            "\n1080p / 30 fps · 8 Mbps · no microphone" +
+            "\n1080p / 30 fps · 8 Mbps" +
             String.format(Locale.US, "\nLocal use: %.2f / %.0f GiB · free %.2f GiB\nClips: %d · pending %.2f GiB · protected %.2f GiB",
                 store.usedBytes() / 1073741824.0, p.getLong("quota", DashcamPolicy.QUOTA_BYTES) / 1073741824.0, store.directory.getUsableSpace() / 1073741824.0, count, pending / 1073741824.0, saved / 1073741824.0) +
             "\nAwaiting verified cloud protection: " + protectionPending +

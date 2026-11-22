@@ -18,6 +18,42 @@ public final class DashboardInstrumentation extends Instrumentation {
         catch(Throwable e){result.putString("stream","Dashboard integration FAILED: "+android.util.Log.getStackTraceString(e));finish(Activity.RESULT_CANCELED,result);}
     }
     private static void check(boolean value,String why){if(!value)throw new AssertionError(why);}
+    private void checkWarningPulse() {
+        DashboardDial gauge = new DashboardDial(activity);
+        gauge.layout(0, 0, 900, 900);
+        Bitmap idle = Bitmap.createBitmap(900, 900, Bitmap.Config.ARGB_8888);
+        Bitmap frame = Bitmap.createBitmap(900, 900, Bitmap.Config.ARGB_8888);
+        gauge.update(DashboardSkin.RB1, 75, false, -1, false, 1000);
+        gauge.draw(new Canvas(idle));
+        gauge.pulseWarning(1000);
+        int early = warningEdge(gauge, idle, frame, 1100);
+        int late = warningEdge(gauge, idle, frame, 1450);
+        check(early > 427 && late < 450, "warning pulse must fit outside the bezel");
+        if (android.animation.ValueAnimator.areAnimatorsEnabled())
+            check(late > early, "warning pulse must expand outward");
+        gauge.update(DashboardSkin.RB1, 75, false, -1, false, 1950);
+        frame.eraseColor(Color.TRANSPARENT);
+        gauge.draw(new Canvas(frame));
+        check(idle.sameAs(frame), "gauge must return to its idle appearance");
+        idle.recycle();
+        frame.recycle();
+    }
+
+    private static int warningEdge(DashboardDial gauge, Bitmap idle, Bitmap frame, long now) {
+        gauge.update(DashboardSkin.RB1, 75, false, -1, false, now);
+        frame.eraseColor(Color.TRANSPARENT);
+        gauge.draw(new Canvas(frame));
+        int edge = -1, strongest = 0;
+        for (int radius = 428; radius < 450; radius++) {
+            int pulse = frame.getPixel(450 + radius, 450);
+            int baseline = idle.getPixel(450 + radius, 450);
+            int increase = Color.red(pulse) * Color.alpha(pulse) - Color.red(baseline) * Color.alpha(baseline);
+            if (increase > strongest) { strongest = increase; edge = radius; }
+        }
+        check(strongest > 0, "warning pulse must be visible");
+        return edge;
+    }
+
     private void exercise() throws Exception {
         Context context=getTargetContext(); final SharedPreferences prefs=context.getSharedPreferences("dashcam",0);
         final SharedPreferences peakPrefs=context.getSharedPreferences("drivePeak",0);
@@ -40,6 +76,7 @@ public final class DashboardInstrumentation extends Instrumentation {
                         bitmap.recycle();
                     }
                 }
+                checkWarningPulse();
                 View root=activity.findViewById(android.R.id.content);
                 Button start=(Button)root.findViewWithTag("record-start"),stop=(Button)root.findViewWithTag("record-stop");
                 check(start!=null && start.isEnabled(),"start unavailable while stopped");
@@ -71,7 +108,7 @@ public final class DashboardInstrumentation extends Instrumentation {
             runOnMainSync(new Runnable(){public void run(){
                 try {
                     java.lang.reflect.Field field=MainActivity.class.getDeclaredField("drivePeak");field.setAccessible(true);
-                    DrivePeak peak=(DrivePeak)field.get(activity);peak.restore(72,true,false);
+                    DrivePeak peak=(DrivePeak)field.get(activity);peak.restore(72,true);
                     Location fix=new Location("gps");fix.setAccuracy(5);fix.setSpeed((float)(95/2.2369362920544));fix.setSpeedAccuracyMetersPerSecond(.1f);fix.setElapsedRealtimeNanos(SystemClock.elapsedRealtimeNanos());fix.setTime(System.currentTimeMillis());
                     activity.onLocationChanged(fix);
                     check(Math.abs(peak.maximumMph()-95)<.01,"accepted GPS did not raise drive peak");
